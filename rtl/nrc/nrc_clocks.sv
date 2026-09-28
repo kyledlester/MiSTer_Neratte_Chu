@@ -15,7 +15,9 @@
 //            mean the CPU fell permanently behind real time; it is a diagnostic, expected 0.
 module nrc_clocks #(
     parameter int MIN_GAP    = 3,
-    parameter int CREDIT_MAX = 255
+    parameter int CREDIT_MAX = 255,
+    parameter int NUM        = 176,     // tick8 = NUM/DEN of clk_sys (simulation may speed up the CPU)
+    parameter int DEN        = 2205
 ) (
     input  logic        clk,
     input  logic        rst,
@@ -27,7 +29,6 @@ module nrc_clocks #(
     output logic  [7:0] credits,
     output logic [15:0] lost_credits
 );
-    localparam int NUM = 176, DEN = 2205;
 
     logic [3:0]  pdiv;
     logic [11:0] acc;

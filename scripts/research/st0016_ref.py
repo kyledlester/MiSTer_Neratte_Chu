@@ -145,6 +145,7 @@ def main():
     ap.add_argument('dumpdir'); ap.add_argument('frame', type=int)
     ap.add_argument('--cha'); ap.add_argument('--png'); ap.add_argument('--cmp')
     ap.add_argument('--idx', help='write raw 16-bit index frame (320x240 LE)')
+    ap.add_argument('--cmpidx', help='compare with an RTL framebuffer dump (320x240 16-bit LE pens)')
     a = ap.parse_args()
     rd = lambda s: open(os.path.join(a.dumpdir, 'f%d_%s.bin' % (a.frame, s)), 'rb').read()
     spr, pal, vregs = rd('spr'), rd('pal'), rd('vreg')
@@ -159,6 +160,21 @@ def main():
             minx, maxx, miny, maxy = CLIP
             for y in range(miny, maxy + 1):
                 f.write(b''.join(bmp[y][x].to_bytes(2, 'little') for x in range(minx, maxx + 1)))
+    if a.cmpidx:
+        rtl = open(a.cmpidx, 'rb').read()
+        minx, maxx, miny, maxy = CLIP
+        bad, first = 0, None
+        for y in range(miny, maxy + 1):
+            for x in range(minx, maxx + 1):
+                i = (y * 320 + (x - minx)) * 2
+                v = rtl[i] | (rtl[i + 1] << 8)
+                if v != bmp[y][x]:
+                    bad += 1
+                    if first is None: first = (x - minx, y, v, bmp[y][x])
+        if bad:
+            print('CMPIDX FAIL %d/76800 pens differ; first at (%d,%d) rtl=%03x model=%03x' % ((bad,) + first))
+            sys.exit(1)
+        print('CMPIDX PASS 76800/76800 pens identical')
     if a.png or a.cmp:
         from PIL import Image
         im = Image.new('RGB', (320, 240))
@@ -169,7 +185,7 @@ def main():
             ref = Image.open(a.cmp).convert('RGB')
             if ref.size != im.size:
                 print('CMP FAIL size', ref.size); sys.exit(1)
-            rp, mp = list(ref.getdata()), list(im.getdata())
+            rp, mp = list(ref.get_flattened_data()), list(im.get_flattened_data())
             bad = [i for i in range(len(rp)) if rp[i] != mp[i]]
             if bad:
                 i = bad[0]
