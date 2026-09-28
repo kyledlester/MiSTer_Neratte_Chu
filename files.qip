@@ -1,0 +1,4 @@
+set_global_assignment -name SDC_FILE NRC.sdc
+set_global_assignment -name SYSTEMVERILOG_FILE NRC.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nrc/nrc_clocks.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nrc/nrc_video_timing.sv

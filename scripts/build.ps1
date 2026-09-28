@@ -1,0 +1,22 @@
+# Full Quartus compile of the Neratte Chu core. Writes build/quartus.log and a summary.
+# Usage: powershell -ExecutionPolicy Bypass -File scripts\build.ps1 [-QuartusBin C:\intelFPGA_lite\17.0\quartus\bin64]
+param([string]$QuartusBin='C:\intelFPGA_lite\17.0\quartus\bin64')
+$ErrorActionPreference='Stop'
+Push-Location (Split-Path $PSScriptRoot -Parent)
+try {
+    if(!(Test-Path build)) { New-Item -ItemType Directory build | Out-Null }
+    $t0=Get-Date
+    $qsh=Join-Path $QuartusBin 'quartus_sh.exe'
+    cmd /c "`"$qsh`" --flow compile NeratteChu > build\quartus.log 2>&1"
+    $rc=$LASTEXITCODE
+    $mins=[math]::Round(((Get-Date)-$t0).TotalMinutes,1)
+    "BUILD exit=$rc minutes=$mins" | Tee-Object build/build-summary.txt
+    Select-String -Path output_files/NeratteChu.fit.summary -Pattern 'Logic utilization|Total registers|Total block memory bits|Total RAM Blocks|Total DSP|Total PLLs' -ErrorAction SilentlyContinue |
+        ForEach-Object { $_.Line.Trim() } | Tee-Object -Append build/build-summary.txt
+    if(Test-Path output_files/NeratteChu.sta.summary) {
+        Get-Content output_files/NeratteChu.sta.summary | Select-String -Pattern 'Type|Slack|TNS' | ForEach-Object { $_.Line.Trim() } | Select-Object -First 24 | Tee-Object -Append build/build-summary.txt
+    }
+    Select-String -Path build/quartus.log -Pattern '^Error' -ErrorAction SilentlyContinue | Select-Object -First 10 | ForEach-Object { $_.Line } | Tee-Object -Append build/build-summary.txt
+    if($rc -ne 0){ throw "Quartus compile failed ($rc)" }
+    Get-Item output_files/NeratteChu.rbf | ForEach-Object { "RBF $($_.FullName) $($_.Length) bytes" } | Tee-Object -Append build/build-summary.txt
+} finally { Pop-Location }
