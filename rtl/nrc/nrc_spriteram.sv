@@ -13,7 +13,8 @@
 //               render_done, `render` is frozen: it equals `live` at the snap instant (MAME semantics).
 //   render_done pulse from the renderer; queued (newer) writes then drain.
 // A snap while a render is still active or pending is dropped and counted (snap_drops).
-// If the FIFO is full the CPU is stalled (cpu_stall) until it drains - never a lost write.
+// cpu_busy (FIFO within 4 entries of full) tells the bus FSM not to start a sprite write; a write
+// whose strobe is already on its way always still fits, so no write is ever lost.
 module nrc_spriteram #(
     parameter int FIFO_LOG2 = 10
 ) (
@@ -24,7 +25,7 @@ module nrc_spriteram #(
     input  logic        cpu_we,          // one-cycle write strobe
     input  logic  [7:0] cpu_wdata,
     output logic  [7:0] cpu_rdata,
-    output logic        cpu_stall,       // FIFO full: hold the write
+    output logic        cpu_busy,        // FIFO nearly full: do not start a new CPU write
     // snapshot / renderer
     input  logic        snap,
     output logic        render_go,
@@ -38,7 +39,7 @@ module nrc_spriteram #(
     // ---- live copy ----
     logic [7:0] live [65536];
     always_ff @(posedge clk) begin
-        if (cpu_we && !cpu_stall) live[cpu_addr] <= cpu_wdata;
+        if (cpu_we) live[cpu_addr] <= cpu_wdata;
         cpu_rdata <= live[cpu_addr];
     end
 
@@ -47,7 +48,7 @@ module nrc_spriteram #(
     logic [23:0] fifo [D];
     logic [FIFO_LOG2:0] wp, rp, mark;
     wire  [FIFO_LOG2:0] level = wp - rp;
-    assign cpu_stall = cpu_we && (level == D[FIFO_LOG2:0]);
+    assign cpu_busy = (level >= (D - 4));
     logic [23:0] fifo_q;
     logic        apply;
 
@@ -77,14 +78,14 @@ module nrc_spriteram #(
     always_ff @(posedge clk) begin
         render_go <= 1'b0;
         apply     <= 1'b0;
-        if (cpu_we && !cpu_stall) fifo[wp[FIFO_LOG2-1:0]] <= {cpu_addr, cpu_wdata};
+        if (cpu_we) fifo[wp[FIFO_LOG2-1:0]] <= {cpu_addr, cpu_wdata};
         fifo_q <= fifo[rp[FIFO_LOG2-1:0]];
         if (reset) begin
             wp <= '0; rp <= '0; mark <= '0;
             snap_pending <= 1'b0; render_active <= 1'b0;
             snap_drops <= '0; fifo_max <= '0;
         end else begin
-            if (cpu_we && !cpu_stall) wp <= wp + 1'd1;
+            if (cpu_we) wp <= wp + 1'd1;
             if (level > fifo_max) fifo_max <= level;
             // Drain: read fifo[rp] (registered), apply one cycle later.
             // A two-stage pipeline: stage 1 issues the read, stage 2 applies.

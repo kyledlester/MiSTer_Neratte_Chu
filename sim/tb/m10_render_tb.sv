@@ -16,11 +16,11 @@ module m10_render_tb;
     logic [7:0] vreg [0:255];
 
     // sprite RAM
-    logic [15:0] c_addr = 0; logic c_we = 0; logic [7:0] c_wd = 0; logic c_stall;
+    logic [15:0] c_addr = 0; logic c_we = 0; logic [7:0] c_wd = 0; logic c_busy;
     logic snap = 0, go, rdone;
     logic [12:0] raddr; logic [63:0] rdata;
     nrc_spriteram spram (.clk(clk), .reset(reset), .cpu_addr(c_addr), .cpu_we(c_we), .cpu_wdata(c_wd),
-        .cpu_rdata(), .cpu_stall(c_stall), .snap(snap), .render_go(go), .render_done(rdone),
+        .cpu_rdata(), .cpu_busy(c_busy), .snap(snap), .render_go(go), .render_done(rdone),
         .render_active(), .r_addr(raddr), .r_data(rdata), .snap_drops(), .fifo_max());
 
     logic [7:0] scroll [32];
@@ -63,8 +63,8 @@ module m10_render_tb;
             logic [7:0] spr [0:65535];
             fd = $fopen(fspr, "rb"); n = $fread(spr, fd); $fclose(fd);
             for (int i = 0; i < 65536; i++) begin
-                @(posedge clk); c_addr <= i; c_wd <= spr[i]; c_we <= 1;
-                @(posedge clk iff !c_stall); c_we <= 0;
+                @(posedge clk iff !c_busy); c_addr <= i; c_wd <= spr[i]; c_we <= 1;
+                @(posedge clk); c_we <= 0;
             end
         end
         @(posedge clk); snap <= 1; @(posedge clk); snap <= 0;

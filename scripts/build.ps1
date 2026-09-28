@@ -10,13 +10,13 @@ try {
     cmd /c "`"$qsh`" --flow compile NeratteChu > build\quartus.log 2>&1"
     $rc=$LASTEXITCODE
     $mins=[math]::Round(((Get-Date)-$t0).TotalMinutes,1)
-    "BUILD exit=$rc minutes=$mins" | Tee-Object build/build-summary.txt
+    "BUILD exit=$rc minutes=$mins" | Out-File -Encoding ascii build/build-summary.txt
     Select-String -Path output_files/NeratteChu.fit.summary -Pattern 'Logic utilization|Total registers|Total block memory bits|Total RAM Blocks|Total DSP|Total PLLs' -ErrorAction SilentlyContinue |
-        ForEach-Object { $_.Line.Trim() } | Tee-Object -Append build/build-summary.txt
+        ForEach-Object { $_.Line.Trim() } | Tee-Object -Variable _t | Out-File -Append -Encoding ascii build/build-summary.txt; $_t
     if(Test-Path output_files/NeratteChu.sta.summary) {
-        Get-Content output_files/NeratteChu.sta.summary | Select-String -Pattern 'Type|Slack|TNS' | ForEach-Object { $_.Line.Trim() } | Select-Object -First 24 | Tee-Object -Append build/build-summary.txt
+        Get-Content output_files/NeratteChu.sta.summary | Select-String -Pattern 'Type|Slack|TNS' | ForEach-Object { $_.Line.Trim() } | Select-Object -First 24 | Tee-Object -Variable _t | Out-File -Append -Encoding ascii build/build-summary.txt; $_t
     }
-    Select-String -Path build/quartus.log -Pattern '^Error' -ErrorAction SilentlyContinue | Select-Object -First 10 | ForEach-Object { $_.Line } | Tee-Object -Append build/build-summary.txt
+    Select-String -Path build/quartus.log -Pattern '^Error' -ErrorAction SilentlyContinue | Select-Object -First 10 | ForEach-Object { $_.Line } | Tee-Object -Variable _t | Out-File -Append -Encoding ascii build/build-summary.txt; $_t
     if($rc -ne 0){ throw "Quartus compile failed ($rc)" }
-    Get-Item output_files/NeratteChu.rbf | ForEach-Object { "RBF $($_.FullName) $($_.Length) bytes" } | Tee-Object -Append build/build-summary.txt
+    Get-Item output_files/NeratteChu.rbf | ForEach-Object { "RBF $($_.FullName) $($_.Length) bytes" } | Tee-Object -Variable _t | Out-File -Append -Encoding ascii build/build-summary.txt; $_t
 } finally { Pop-Location }

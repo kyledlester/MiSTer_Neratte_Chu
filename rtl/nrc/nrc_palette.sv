@@ -5,8 +5,10 @@
 // through the E5 bank register (512 bytes per bank).
 // MAME converts pens to colours at the moment it renders the frame (vblank IRQ). To keep pens and
 // colours consistent the renderer's snapshot instant also copies the live palette into the
-// snapshot slot that travels with the framebuffer being drawn (snap_buf). The copy takes 1024 clocks;
-// CPU palette writes during the copy are stalled (cpu_stall) so the copy is exact.
+// snapshot slot that travels with the framebuffer being drawn (snap_buf). The copy takes 1024 clocks
+// and must see the palette as it was at the snap instant: a CPU write that arrives while copying is
+// held (one entry) and applied right after the copy; cpu_busy tells the bus FSM not to start another
+// palette write meanwhile. No write is lost and the copy is exact.
 // Display reads (buffer, pen) -> RGB888 with MAME pal5bit expansion; pen 1024 (UNUSED_PEN) shows colour 0.
 module nrc_palette (
     input  logic        clk,
@@ -16,7 +18,7 @@ module nrc_palette (
     input  logic        cpu_we,
     input  logic  [7:0] cpu_wdata,
     output logic  [7:0] cpu_rdata,
-    output logic        cpu_stall,
+    output logic        cpu_busy,
     // snapshot
     input  logic        snap,
     input  logic        snap_buf,
@@ -36,14 +38,28 @@ module nrc_palette (
     logic [9:0] c_widx;
     logic [14:0] c_data;
 
-    assign cpu_stall = cpu_we && copying;
+    // deferred write (arrived during a copy)
+    logic        dw_pend;
+    logic [10:0] dw_addr;
+    logic  [7:0] dw_data;
+    assign cpu_busy = copying || dw_pend;
 
-    // live RAM: port A = CPU, port B = copy engine
+    wire         w_en   = (cpu_we && !copying) || (dw_pend && !copying);
+    wire  [10:0] w_addr = (dw_pend && !copying) ? dw_addr : cpu_addr;
+    wire   [7:0] w_data = (dw_pend && !copying) ? dw_data : cpu_wdata;
+    always_ff @(posedge clk) begin
+        if (reset) dw_pend <= 1'b0;
+        else if (cpu_we && copying) begin
+            dw_pend <= 1'b1; dw_addr <= cpu_addr; dw_data <= cpu_wdata;
+        end else if (dw_pend && !copying) dw_pend <= 1'b0;
+    end
+
+    // live RAM: port A = CPU (or the deferred write), port B = copy engine
     logic [7:0] lo_b, hi_b;
     always_ff @(posedge clk) begin
-        if (cpu_we && !copying) begin
-            if (cpu_addr[0]) hi[cpu_addr[10:1]] <= cpu_wdata;
-            else             lo[cpu_addr[10:1]] <= cpu_wdata;
+        if (w_en) begin
+            if (w_addr[0]) hi[w_addr[10:1]] <= w_data;
+            else           lo[w_addr[10:1]] <= w_data;
         end
         cpu_rdata <= cpu_addr[0] ? hi[cpu_addr[10:1]] : lo[cpu_addr[10:1]];
     end

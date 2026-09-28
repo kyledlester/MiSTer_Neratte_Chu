@@ -72,7 +72,7 @@ m3() {
   ext=${NRC_EXTROM:-C:/Users/klest/NRC_research/romx/extrom.bin}
   ref=${NRC_WREF:-C:/Users/klest/NRC_research/cap/writes_boot.txt}
   VLOGDEFS=""; [ "${NRC_TURBO:-0}" = 1 ] && VLOGDEFS="+define+TURBO"
-  run m3 "+EXTROM=$ext" "+LOG=build/sim/m3_writes.txt" "+MAXW=${NRC_MAXW:-20000}" || return 1
+  run m3 "+EXTROM=$ext" "+LOG=build/sim/m3_writes.txt" "+MAXW=${NRC_MAXW:-20000}" "+FRAMES=${NRC_SIMFRAMES:-0}" || return 1
   python scripts/research/cmp_writes.py "$ref" build/sim/m3_writes.txt
 }
 

@@ -130,23 +130,23 @@ module nrc_st0016 #(
 
     // sprite RAM
     wire  [15:0] spr_cpu_addr = {a[12] ? spr_bank1 : spr_bank0, a[11:0]};
-    logic        spr_we, spr_stall;
+    logic        spr_we, spr_busy;
     logic  [7:0] spr_q;
     nrc_spriteram spram (
         .clk(clk), .reset(reset),
         .cpu_addr(spr_cpu_addr), .cpu_we(spr_we), .cpu_wdata(dout), .cpu_rdata(spr_q),
-        .cpu_stall(spr_stall),
+        .cpu_busy(spr_busy),
         .snap(irq_event), .render_go(render_go), .render_done(render_done), .render_active(),
         .r_addr(spr_raddr), .r_data(spr_rdata), .snap_drops(dbg_snap_drops), .fifo_max()
     );
 
     // palette
-    logic       pal_we, pal_stall;
+    logic       pal_we, pal_busy;
     logic [7:0] pal_q;
     nrc_palette palette (
         .clk(clk), .reset(reset),
         .cpu_addr({pal_bank, a[8:0]}), .cpu_we(pal_we), .cpu_wdata(dout), .cpu_rdata(pal_q),
-        .cpu_stall(pal_stall),
+        .cpu_busy(pal_busy),
         .snap(pal_snap), .snap_buf(pal_snap_buf), .copying(),
         .disp_buf(disp_buf), .disp_pen(disp_pen), .disp_rgb(disp_rgb)
     );
@@ -269,18 +269,14 @@ module nrc_st0016 #(
                             end
                         end else if (a[15:13] == 3'b110) begin
                             if (is_rd) din <= spr_q;
-                            else begin
-                                spr_we <= 1'b1;
-                                if (spr_stall) bs <= B_DECODE;   // FIFO full: retry
-                            end
+                            else if (spr_busy) bs <= B_DECODE;  // FIFO nearly full: wait
+                            else spr_we <= 1'b1;
                         end else if (a[15:8] == 8'hE9) begin
                             if (is_rd) din <= snd_q; else snd_we <= 1'b1;
                         end else if (a[15:9] == 7'b1110_101) begin
                             if (is_rd) din <= pal_q;
-                            else begin
-                                pal_we <= 1'b1;
-                                if (pal_stall) bs <= B_DECODE;
-                            end
+                            else if (pal_busy) bs <= B_DECODE;  // snapshot copy running: wait
+                            else pal_we <= 1'b1;
                         end else if (a[15:5] == 11'b1110_1100_000) begin
                             cm_req  <= 1'b1;
                             cm_we   <= !is_rd;

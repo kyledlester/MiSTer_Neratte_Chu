@@ -23,6 +23,7 @@ module m3_cpu_tb;
     logic ce_pix, hb, vb, hs, vs, rom_ready;
     logic [23:0] rgb;
     logic [15:0] pc, frames;
+    logic [15:0] rt, drops, irqs, nmis;
 
 `ifdef TURBO
     localparam int CN = 1, CD = 4;
@@ -39,7 +40,7 @@ module m3_cpu_tb;
         .joy0(32'd0), .joy1(32'd0), .dbg_overlay(1'b0),
         .ce_pix(ce_pix), .rgb(rgb), .hblank(hb), .vblank(vb), .hsync(hs), .vsync(vs),
         .snd_l(), .snd_r(), .rom_ready(rom_ready),
-        .dbg_pc(pc), .dbg_frames(frames), .dbg_render_ms100(), .dbg_snap_drops(), .dbg_irqs(), .dbg_nmis());
+        .dbg_pc(pc), .dbg_frames(frames), .dbg_render_ms100(rt), .dbg_snap_drops(drops), .dbg_irqs(irqs), .dbg_nmis(nmis));
 
     // behavioural SDRAM (16-bit words, little-endian byte pairs)
     logic [7:0] mem [0:32'h0A00000 - 1];
@@ -72,6 +73,8 @@ module m3_cpu_tb;
         if (!reset && rom_ready && dut.vblank_start) begin
             nf++;
             $fwrite(fd, "F %0d\n", nf);
+            $display("M3 FRAME %0d: writes=%0d irqs=%0d nmis=%0d pc=%04x shown=%0d render=%0d0us drops=%0d iff1=%0d",
+                     nf, nw, irqs, nmis, pc, frames, rt, drops, dut.st0016.iff1);
         end
     end
 
@@ -100,7 +103,6 @@ module m3_cpu_tb;
         $display("M3: rom_ready at %0t, CPU released", $time);
         while (nw < maxw && (maxframes == 0 || nf < maxframes)) begin
             repeat (100000) @(posedge clk);
-            $display("M3: t=%0t writes=%0d frames=%0d pc=%04x", $time, nw, nf, pc);
         end
         $fclose(fd);
         $display("PASS M3 CPU: %0d writes, %0d frames logged to %s (verdict: cmp_writes.py)", nw, nf, flog);
