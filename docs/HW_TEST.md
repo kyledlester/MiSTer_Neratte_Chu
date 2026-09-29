@@ -5,12 +5,13 @@
 |---|---|
 | NeratteChu_20260928 | owner test: boots, fully playable, sound OK, CRT OK; service menu showed only its background page; MiSTer loading screen not visible on CRT |
 | NeratteChu_20260929 | service menu (tilemap layer) implemented; sync kept during ROM loading (CRT loading screen); CRT timing measured (m9) |
+| NeratteChu_20260929b | Flip Screen DIP (180-degree flip), OSD CRT Adjust submenu, Pause (button + OSD options); CRT sync edge/porch change (front porch 39 -> 49 dots) |
 
 ## Files to copy
 
 | File (repository) | Copy to (MiSTer SD card) |
 |---|---|
-| `releases/NeratteChu_20260929.rbf` | `/media/fat/_Arcade/cores/NeratteChu_20260929.rbf` |
+| `releases/NeratteChu_20260929b.rbf` | `/media/fat/_Arcade/cores/NeratteChu_20260929b.rbf` |
 | `mra/Neratte Chu (ver. 1.10).mra` | `/media/fat/_Arcade/Neratte Chu (ver. 1.10).mra` |
 | `nratechu.zip` (your MAME set) | `/media/fat/games/mame/nratechu.zip` (or `/media/fat/_Arcade/mame/`) |
 
@@ -51,9 +52,18 @@ One yellow line at the top: `R<r> P<pppp> F<ffff> I<iiii> N<nnnn> T<tttt> D<dddd
 
 ## Build under test
 
-`releases/NeratteChu_20260929.rbf` (SHA-1 72268e925047657118073c62d0c95bb69ec2fdda): Quartus 17.0 Lite, fitter seed 2, all timing met
-(core clock setup +0.451 ns, hold +0.247 ns; SDRAM +1.824 / +3.212 ns); 11,967 ALMs, 462/553 M10K.
-Simulation regression `sh scripts/sim.sh all`: 0 failing.
+`releases/NeratteChu_20260929b.rbf` (SHA-1 c2bf1914a590dd06d8d1a851a032b5fb577ca91c): Quartus 17.0 Lite,
+fitter seed 2, all timing met (core clock setup +0.499 ns, hold +0.244 ns; SDRAM +1.849 / +3.210 ns);
+12,220 ALMs, 465/553 M10K. Simulation regression `sh scripts/sim.sh all`: 0 failing.
+
+## New in 20260929b: what to check
+
+| Feature | How | Expected |
+|---|---|---|
+| Flip Screen | DIPs -> Flip Screen On, reset | whole picture rotated 180 degrees (HDMI and CRT); Off = normal |
+| CRT Adjust | OSD -> CRT Adjust -> On, then H-Size / H-Position / V-Shift | picture resizes / moves; the CRT never loses sync; Off = exactly the previous picture. HDMI follows while On (core-side, as NA-1) |
+| Pause | map "Pause" (J1 list; default L) and press it; or OSD -> Pause options -> Pause when OSD is open | game, music and timers freeze; press again to resume; after 10 s the picture dims (option) |
+| CRT position | CRT Adjust Off | picture about 1.4 us (10 dots) further left than 20260929 (front porch 49 dots, needed for H-Position -48) |
 
 ## Service mode (DIP "Service Mode" = On)
 Expected: "---[ TEST MODE ]---" menu (SYSTEM / DISPLAY / INPUT / OUTPUT / SOUND TEST), P1 up/down to
