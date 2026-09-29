@@ -11,7 +11,7 @@ Evidence and reasons for any re-ordering are recorded per milestone.
 | M3 | Z80 / reset / first instruction execution | DONE (sim, real ROM) |
 | M4 | ROM banking + complete CPU address map | DONE (sim, boot phase) |
 | M5 | Internal banking / character RAM infrastructure | DONE (sim, boot phase) |
-| M6 | Interrupt / scanline framework | IMPLEMENTED, awaiting system evidence |
+| M6 | Interrupt / scanline framework | DONE (system sim) |
 | M7 | Character DMA | IMPLEMENTED (unused by nratechu; MAME semantics), no bench |
 | M8 | Palette | DONE (sim) |
 | M9 | Video timing / MiSTer pixel pipeline | DONE (sim timing; build) |
@@ -81,13 +81,20 @@ sound registers, I/O mux, one-line extrom read cache).
   palette RAM initialisation. Interrupts are still disabled by the game at that point (first EI at
   about frame 150), so this run does not exercise M6.
 
-## M6 - Interrupts - IMPLEMENTED
+## M6 - Interrupts - DONE (system sim) 2026-09-28
 `nrc_irq`: IRQ (HOLD_LINE semantics: held until the IM1 acknowledge cycle) at vblank start; NMIs at
 IRQ + (16 + 64k)/384 of a frame (k = 0..5, MAME's 64-line spacing and phase), delivered only if the
 T80's IFF1 is set at that instant (MAME behaviour), held low for 4 CPU clocks. All constants in one
-module (docs/KNOWN_ISSUES.md U-2). Evidence so far: IRQ count increments once per frame from reset
-while the game runs with interrupts disabled (system bench, frames 1-9); the long real-time system
-run past the game's first EI (MAME frame ~150) is in progress.
+module (docs/KNOWN_ISSUES.md U-2).
+
+`sim.sh m6` (`m6_system_tb`: full `nrc_core` running the real program from reset, CPU in simulation
+turbo until the game's first EI, then the exact 8 MHz time base):
+- every real-time frame: exactly 1 IRQ; 6 NMIs during the boot sequence (occasionally 5 + 1 gated
+  by IFF1), as MAME (6 NMIs/frame from its frame 149); no render snapshot drops;
+- **106 real-time frames after the first EI the displayed framebuffer (the Seta logo) is identical,
+  pen for pen (76,800/76,800), to MAME frame 250** (`st0016_ref.py --cmpidx`). This is the first
+  end-to-end evidence: boot, char-RAM upload, banking, interrupts, sprite snapshot, renderer and
+  framebuffer swap all agree with MAME ("video alive" in simulation).
 
 ## M8 - Palette - DONE (sim)
 `sim.sh m8`: PASS (5,124 checks): 4 banks x 512 B CPU readback, snapshot copy with CPU writes
