@@ -4,7 +4,12 @@
 A line-for-line port of MAME 0.289 st0016_cpu_device::draw_sprites() / draw_screen()
 (src/mame/seta/st0016.cpp) for game_flag = 1 (nratechu): spr_dx = 0, spr_dy = 8,
 visible area x 8..327, y 0..239, bitmap pre-filled with UNUSED_PEN (1024).
-Tilemaps are modelled too (MAME master semantics) but Neratte Chu never enables them.
+Tilemaps (used by nratechu only in service mode) follow MAME 0.289 draw_bgmap: 8 layers, 64x32
+tiles column-major at sprite RAM reg1 * 0x1000, no scroll; priority 0 layers (reg3 != 0xFF) before
+the sprites with the sprite pixel rule (merge when reg7 == 0x12), priority 1 layers after them with
+plain transparency. Tile flip bits are IGNORED by default: nratechu's service-mode text has byte 3 =
+0x40, which MAME 0.289 draws as flip-Y (upside-down text) and MAME master as flip-X (mirrored text);
+readable text needs no flip. --tmflip reproduces MAME 0.289 (for validating the model).
 
 This is the golden model the RTL renderer is compared against.
 
@@ -113,12 +118,47 @@ def draw_sprites(bmp, spr, vregs, ch, stats):
                 break
 
 
-def render(spr, pal, vregs, cha):
+def draw_bgmap(bmp, spr, vregs, ch, priority, tmflip, stats):
+    minx, maxx, miny, maxy = CLIP
+    for j in range(0, 0x40, 8):
+        if not vregs[j + 1] or (vregs[j + 3] == 0xff) != bool(priority):
+            continue
+        i = (vregs[j + 1] & 0x0f) * 0x1000
+        for x in range(64):
+            for y in range(32):
+                code = spr[i] + 256 * spr[i + 1]
+                color = spr[i + 2] & 0x3f
+                flipx = tmflip and (spr[i + 3] >> 7) & 1
+                flipy = tmflip and (spr[i + 3] >> 6) & 1
+                i += 4
+                xpos, ypos = x * 8 + SPR_DX, y * 8 + SPR_DY
+                for yl in range(8):
+                    dy = (ypos + 7 - yl) if flipy else (ypos + yl)
+                    for xl in range(8):
+                        p = ch.pix(code, xl, yl)
+                        dx = (xpos + 7 - xl) if flipx else (xpos + xl)
+                        if not priority and dx > maxx:
+                            dx = (dx - 512) & 0xffff
+                        if not (minx <= dx <= maxx and miny <= dy <= maxy):
+                            continue
+                        row = bmp[dy]
+                        if priority:
+                            if p:
+                                row[dx] = p + color * 16
+                        elif vregs[j + 7] == 0x12:
+                            row[dx] = (row[dx] | (p << 4)) & 0x3ff
+                        elif p or row[dx] == UNUSED_PEN:
+                            row[dx] = p + color * 16
+                stats['tmtiles'] = stats.get('tmtiles', 0) + 64 * 32
+
+
+def render(spr, pal, vregs, cha, tmflip=False):
     bmp = [[UNUSED_PEN] * BMP_W for _ in range(BMP_H)]
     stats = {'entries': 0, 'subs': 0, 'tiles': 0, 'pixels': 0}
-    if any(vregs[j + 1] for j in range(0, 0x40, 8)):
-        print('WARNING: tilemap enabled; tilemaps not modelled in this reference', file=sys.stderr)
-    draw_sprites(bmp, spr, vregs, Charram(cha), stats)
+    ch = Charram(cha)
+    draw_bgmap(bmp, spr, vregs, ch, 0, tmflip, stats)
+    draw_sprites(bmp, spr, vregs, ch, stats)
+    draw_bgmap(bmp, spr, vregs, ch, 1, tmflip, stats)
     return bmp, stats
 
 
@@ -144,6 +184,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('dumpdir'); ap.add_argument('frame', type=int)
     ap.add_argument('--cha'); ap.add_argument('--png'); ap.add_argument('--cmp')
+    ap.add_argument('--tmflip', action='store_true', help='tilemap flips as MAME 0.289')
     ap.add_argument('--idx', help='write raw 16-bit index frame (320x240 LE)')
     ap.add_argument('--cmpidx', help='compare with an RTL framebuffer dump (320x240 16-bit LE pens)')
     a = ap.parse_args()
@@ -151,7 +192,7 @@ def main():
     spr, pal, vregs = rd('spr'), rd('pal'), rd('vreg')
     chap = a.cha or find_cha(a.dumpdir, a.frame)
     cha = open(chap, 'rb').read()
-    bmp, st = render(spr, pal, vregs, cha)
+    bmp, st = render(spr, pal, vregs, cha, a.tmflip)
     print('frame %d cha=%s entries=%d subs=%d tiles=%d pixels=%d' % (
         a.frame, os.path.basename(chap), st['entries'], st['subs'], st['tiles'], st['pixels']))
     img = to_rgb(bmp, pal)

@@ -20,6 +20,7 @@ spec() {
     m2)  echo "m2_loader_tb|| rtl/nrc/nrc_sdram_arb.sv rtl/nrc/nrc_loader.sv build/sim/sdram_sim.sv sim/models/sdr_sdram_model.sv sim/tb/m2_loader_tb.sv" ;;
     m3)  echo "m3_cpu_tb|$T80| $CORE rtl/nrc/nrc_core.sv sim/tb/m3_cpu_tb.sv" ;;
     m6)  echo "m6_system_tb|$T80| $CORE rtl/nrc/nrc_core.sv sim/tb/m6_system_tb.sv" ;;
+    m9)  echo "m9_video_tb|$T80| $CORE rtl/nrc/nrc_core.sv sim/tb/m9_video_tb.sv" ;;
     m8)  echo "m8_palette_tb|| rtl/nrc/nrc_palette.sv sim/tb/m8_palette_tb.sv" ;;
     m10) echo "m10_render_tb|| rtl/nrc/nrc_render.sv rtl/nrc/nrc_framebuffer.sv rtl/nrc/nrc_spriteram.sv sim/tb/m10_render_tb.sv" ;;
     m15) echo "m15_sound_tb|| rtl/nrc/nrc_sound.sv sim/tb/m15_sound_tb.sv" ;;
@@ -91,10 +92,11 @@ if [ "${1:-}" = m15 ]; then m15; exit $?; fi
 if [ "${1:-}" = m3 ]; then m3; exit $?; fi
 if [ "${1:-}" = all ]; then
   fails=0
-  for t in m0 m2 m8; do run "$t" || fails=$((fails+1)); done
+  for t in m0 m2 m8 m9; do run "$t" || fails=$((fails+1)); done
   m15 || fails=$((fails+1))
   m3 || fails=$((fails+1))
   m10 || fails=$((fails+1))
+  NRC_DUMP=C:/Users/klest/NRC_research/cap/svc NRC_FRAMES=300 m10 || fails=$((fails+1))
   echo "REGRESSION: $fails failing"
   exit $fails
 fi

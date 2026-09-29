@@ -24,11 +24,13 @@ module m10_render_tb;
         .render_active(), .r_addr(raddr), .r_data(rdata), .snap_drops(), .fifo_max());
 
     logic [7:0] scroll [32];
+    logic [7:0] tm_base [8];
+    logic [7:0] tm_prio, tm_merge;
     logic m_req, m_ack = 0; logic [24:0] m_addr; logic [63:0] m_rdata;
     logic [16:0] fb_raddr, fb_waddr; logic [10:0] fb_rdata, fb_wdata; logic fb_we;
     logic [15:0] st_tiles, st_fetched; logic [23:0] st_cycles;
     nrc_render #(.CHA_BASE(25'h0800000)) render (
-        .clk(clk), .reset(reset), .go(go), .done(rdone), .busy(), .scroll(scroll),
+        .clk(clk), .reset(reset), .go(go), .done(rdone), .busy(), .scroll(scroll), .tm_base(tm_base), .tm_prio(tm_prio), .tm_merge(tm_merge),
         .spr_addr(raddr), .spr_data(rdata),
         .m_req(m_req), .m_addr(m_addr), .m_ack(m_ack), .m_rdata(m_rdata),
         .fb_raddr(fb_raddr), .fb_rdata(fb_rdata), .fb_we(fb_we), .fb_waddr(fb_waddr), .fb_wdata(fb_wdata),
@@ -58,6 +60,11 @@ module m10_render_tb;
         fd = $fopen(fcha, "rb"); n = $fread(cha, fd); $fclose(fd);
         fd = $fopen(fvreg, "rb"); n = $fread(vreg, fd); $fclose(fd);
         for (int i = 0; i < 32; i++) scroll[i] = vreg[8'h40 + i];
+        for (int j = 0; j < 8; j++) begin
+            tm_base[j]  = vreg[8 * j + 1];
+            tm_prio[j]  = (vreg[8 * j + 3] == 8'hFF);
+            tm_merge[j] = (vreg[8 * j + 7] == 8'h12);
+        end
         repeat (5) @(posedge clk); reset = 0;
         begin
             logic [7:0] spr [0:65535];

@@ -16,7 +16,7 @@ Evidence and reasons for any re-ordering are recorded per milestone.
 | M8 | Palette | DONE (sim) |
 | M9 | Video timing / MiSTer pixel pipeline | DONE (sim timing; build) |
 | M10 | Character decode | DONE (sim, part of M12 bench) |
-| M11 | Background / tilemap renderer | DEFERRED (nratechu never enables tilemaps) |
+| M11 | Background / tilemap renderer | DONE (sim; service mode uses one layer) |
 | M12 | Sprite / object renderer | DONE (sim, pixel-exact on 6 MAME frames) |
 | M13 | Video composition / priorities | DONE for nratechu (sprites only; painter's order + UNUSED pen) |
 | M14 | Inputs / gameplay | IMPLEMENTED, awaiting hardware |

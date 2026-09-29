@@ -61,7 +61,7 @@ module nrc_core #(
     // ------------------------------------------------------------------ clocks / raster
     logic tick8, ce_snd, ce_cpu, cpu_stall;
     nrc_clocks #(.NUM(CPU_NUM), .DEN(CPU_DEN)) clocks (
-        .clk(clk), .rst(reset), .cpu_stall(cpu_stall), .turbo(sim_turbo),
+        .clk(clk), .rst(reset), .rst_video(init), .cpu_stall(cpu_stall), .turbo(sim_turbo),
         .ce_pix(ce_pix), .tick8(tick8), .ce_snd(ce_snd), .ce_cpu(ce_cpu),
         .credits(), .lost_credits()
     );
@@ -69,8 +69,10 @@ module nrc_core #(
     logic [8:0] hcnt, vcnt, vx;
     logic [7:0] vy;
     logic t_hb, t_vb, t_hs, t_vs, vblank_start, frame_start;
+    // The raster free-runs through OSD resets and ROM downloads (only PLL loss resets it): a CRT keeps
+    // sync, so the MiSTer OSD/loading screen stays visible on analog outputs.
     nrc_video_timing timing (
-        .clk(clk), .rst(reset), .ce_pix(ce_pix),
+        .clk(clk), .rst(init), .ce_pix(ce_pix),
         .hcnt(hcnt), .vcnt(vcnt), .x(vx), .y(vy),
         .hblank(t_hb), .vblank(t_vb), .hsync(t_hs), .vsync(t_vs),
         .vblank_start(vblank_start), .frame_start(frame_start)
@@ -154,6 +156,8 @@ module nrc_core #(
     logic [12:0] spr_raddr;
     logic [63:0] spr_rdata;
     logic  [7:0] scroll_snap [32];
+    logic  [7:0] tm_base_snap [8];
+    logic  [7:0] tm_prio_snap, tm_merge_snap;
     logic [16:0] d_addr;
     logic [10:0] d_pen;
     logic [23:0] d_rgb;
@@ -168,6 +172,7 @@ module nrc_core #(
         .m_rdata(a_rdata),
         .irq_event(vblank_start), .pal_snap(snap_ok), .render_go(render_go), .render_done(render_done),
         .spr_raddr(spr_raddr), .spr_rdata(spr_rdata), .scroll_snap(scroll_snap),
+        .tm_base_snap(tm_base_snap), .tm_prio_snap(tm_prio_snap), .tm_merge_snap(tm_merge_snap),
         .pal_snap_buf(!new_front), .disp_buf(front), .disp_pen(d_pen), .disp_rgb(d_rgb),
         .joy0(joy0), .joy1(joy1), .dsw1(dsw1), .dsw2(dsw2),
         .snd_l(snd_l), .snd_r(snd_r),
@@ -182,7 +187,8 @@ module nrc_core #(
     logic [23:0] r_cycles;
     nrc_render #(.CHA_BASE(CHA_BASE)) render (
         .clk(clk), .reset(sys_reset), .go(render_go), .done(render_done), .busy(render_busy),
-        .scroll(scroll_snap), .spr_addr(spr_raddr), .spr_data(spr_rdata),
+        .scroll(scroll_snap),
+        .tm_base(tm_base_snap), .tm_prio(tm_prio_snap), .tm_merge(tm_merge_snap), .spr_addr(spr_raddr), .spr_data(spr_rdata),
         .m_req(rm_req), .m_addr(rm_addr), .m_ack(a_ack[4]), .m_rdata(a_rdata),
         .fb_raddr(fb_raddr), .fb_rdata(fb_rdata), .fb_we(fb_we), .fb_waddr(fb_waddr), .fb_wdata(fb_wdata),
         .st_tiles(), .st_fetched(), .st_cycles(r_cycles)

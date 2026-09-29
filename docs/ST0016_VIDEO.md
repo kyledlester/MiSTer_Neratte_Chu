@@ -77,12 +77,21 @@ writes per frame (~2x overdraw of 76,800 visible pixels). Sprite RAM receives on
 per frame during play (most drawn material is static between scene changes); scene changes rewrite
 up to ~30,000 bytes over a few frames.
 
-## Tilemaps (not used by nratechu)
+## Tilemaps (nratechu: service mode only)
 
-MAME master: 8 layers, 64x32 tiles column-major in sprite RAM at `(reg1 & 0x0E) << 12`, 4 bytes per
-tile (code.w, colour, flip); scroll X = `reg0 | reg1 << 8` (9 bits used), scroll Y = reg2; enabled when
-reg1 != 0; priority 1 when reg3 == `$FF`; merge mode when reg7 == `$12`. Not implemented in the first
-pass (no nratechu evidence); documented as a known limitation.
+Implemented per MAME 0.289 `draw_bgmap` (the runnable reference): 8 layers (vregs `$00-$3F`, 8 bytes
+each), enabled when reg1 != 0; 64x32 tiles column-major in sprite RAM at `reg1 * $1000`, 4 bytes per
+tile (code.w, colour & $3F, attribute); tile (x, y) drawn at (x*8 + spr_dx, y*8 + spr_dy), no scroll.
+reg3 == `$FF`: drawn after the sprites with plain transparency; otherwise before the sprites with the
+sprite pixel rule (merge mode when reg7 == `$12`).
+
+The service menu (DIP SW2:8) uses one layer: regs `00 02 FF FF 7F 29 00 20` (base `$2000`, over the
+sprites); every text tile has attribute `$40`. MAME 0.289 treats attribute bit 6 as flip-Y (text upside
+down), MAME master as flip-X (text mirrored); the core ignores the attribute bits, which gives readable
+text [INFERENCE]. With MAME's flip rule the model (`st0016_ref.py --tmflip`) equals MAME on 20 service
+screens (menu, display, input, output and sound tests); the RTL equals the model (flips ignored).
+MAME master's tilemap scroll (reg0/reg1 bit 0 = X, reg2 = Y) is not implemented: nratechu's only
+layer has reg0 = 0 and reg2 = `$FF` (0.289 ignores scroll).
 
 ## Timing
 

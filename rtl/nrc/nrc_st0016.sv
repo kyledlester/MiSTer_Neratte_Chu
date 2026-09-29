@@ -49,6 +49,9 @@ module nrc_st0016 #(
     input  logic [12:0] spr_raddr,
     output logic [63:0] spr_rdata,
     output logic [7:0]  scroll_snap [32], // vregs 40-5F at the snapshot
+    output logic [7:0]  tm_base_snap [8], // per tilemap slot at the snapshot: reg1 (0 = off)
+    output logic [7:0]  tm_prio_snap,     //   reg3 == $FF (drawn over the sprites)
+    output logic [7:0]  tm_merge_snap,    //   reg7 == $12 (merge mode)
     input  logic        pal_snap_buf,
     input  logic        disp_buf,
     input  logic [10:0] disp_pen,
@@ -103,6 +106,8 @@ module nrc_st0016 #(
     logic  [1:0] pal_bank;
     logic  [7:0] mux_sel;
     logic  [7:0] scroll [32];
+    logic  [7:0] tm_base [8];
+    logic  [7:0] tm_prio, tm_merge;
     logic  [7:0] dmareg [9];           // A0..A8
     logic [15:0] lfsr;
 
@@ -216,6 +221,8 @@ module nrc_st0016 #(
             lfsr <= 16'hACE1;
             dbg_dma_count <= '0;
             for (int i = 0; i < 32; i++) scroll[i] <= 8'd0;
+            for (int i = 0; i < 8; i++) tm_base[i] <= 8'd0;
+            tm_prio <= 8'd0; tm_merge <= 8'd0;
             for (int i = 0; i < 9; i++) dmareg[i] <= 8'd0;
         end else begin
             case (bs)
@@ -240,6 +247,11 @@ module nrc_st0016 #(
                             if (a[7:0] < 8'hC0) begin
                                 vregs_we <= 1'b1;
                                 if (a[7:5] == 3'b010) scroll[a[4:0]] <= dout;
+                                if (a[7:6] == 2'b00) begin
+                                    if (a[2:0] == 3'd1) tm_base[a[5:3]] <= dout;
+                                    if (a[2:0] == 3'd3) tm_prio[a[5:3]] <= (dout == 8'hFF);
+                                    if (a[2:0] == 3'd7) tm_merge[a[5:3]] <= (dout == 8'h12);
+                                end
                                 if (a[7:0] >= 8'hA0 && a[7:0] <= 8'hA8) dmareg[a[3:0]] <= dout;
                                 if (a[7:0] == 8'hA8 && dout[5]) begin
                                     dma_src   <= {dmareg[2], dmareg[1], dmareg[0]} << 1;
@@ -350,6 +362,10 @@ module nrc_st0016 #(
 
     // scroll snapshot at the render instant (the IRQ / vblank event)
     always_ff @(posedge clk) begin
-        if (irq_event) for (int i = 0; i < 32; i++) scroll_snap[i] <= scroll[i];
+        if (irq_event) begin
+            for (int i = 0; i < 32; i++) scroll_snap[i] <= scroll[i];
+            for (int i = 0; i < 8; i++) tm_base_snap[i] <= tm_base[i];
+            tm_prio_snap <= tm_prio; tm_merge_snap <= tm_merge;
+        end
     end
 endmodule

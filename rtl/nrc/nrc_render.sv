@@ -4,7 +4,13 @@
 // Hardware port of MAME 0.289 st0016_cpu_device::draw_sprites() for game_flag 1 (nratechu):
 // spr_dx = 0, spr_dy = 8, clip x 8..327 / y 0..239, bitmap pre-filled with UNUSED_PEN (1024).
 // Golden model: scripts/research/st0016_ref.py (pixel-identical to MAME snapshots).
-// Tilemaps are not drawn (Neratte Chu never enables one; docs/KNOWN_ISSUES.md U-4).
+// Tilemaps (MAME 0.289 draw_bgmap; Neratte Chu uses one only in its service mode): per slot with
+// reg1 != 0, 64x32 tiles column-major at sprite RAM (reg1 & 15) * 0x1000, 4 bytes each (code.w, colour,
+// attr), no scroll, tile (x, y) at (x*8 + spr_dx, y*8 + spr_dy). Phase order as MAME draw_screen:
+// priority-0 layers (reg3 != $FF: sprite pixel rule, merge if reg7 == $12), sprites, priority-1
+// layers (plain transparency: pen 0 not drawn). Tile flip bits are ignored (docs/ST0016_VIDEO.md:
+// the service-mode text carries attr $40 and is only readable unflipped). Only the visible tiles
+// (columns 1-40, rows 0-28) are processed.
 //
 // Sequence per frame (started by `go`, from the sprite-RAM snapshot):
 //   1. clear the target buffer to UNUSED_PEN (76,800 writes);
@@ -25,6 +31,9 @@ module nrc_render #(
     output logic        done,          // one-cycle pulse when the frame is complete
     output logic        busy,
     input  logic  [7:0] scroll [32],   // vregs 40-5F snapshot
+    input  logic  [7:0] tm_base [8],   // tilemap slot reg1 snapshot (0 = off)
+    input  logic  [7:0] tm_prio,       // slot reg3 == $FF
+    input  logic  [7:0] tm_merge,      // slot reg7 == $12
     // sprite RAM render copy
     output logic [12:0] spr_addr,
     input  logic [63:0] spr_data,      // valid the cycle after spr_addr
@@ -50,7 +59,8 @@ module nrc_render #(
 
     typedef enum logic [4:0] {
         S_IDLE, S_CLEAR, S_MAIN_RD, S_MAIN_WAIT, S_MAIN_PARSE, S_SUB_RD, S_SUB_WAIT, S_SUB_PARSE,
-        S_TILE, S_TILE_CHK, S_FETCH, S_DRAW, S_DRAIN, S_NEXT, S_DONE
+        S_TILE, S_TILE_CHK, S_FETCH, S_DRAW, S_DRAIN, S_NEXT, S_DONE,
+        S_TM_SLOT, S_TM_RD, S_TM_WAIT, S_TM_PARSE, S_SPR_END
     } st_t;
     st_t st;
 
@@ -78,6 +88,12 @@ module nrc_render #(
     logic  [1:0] fg;                 // fetch group
     logic  [5:0] pix;                // pixel counter (source row*8 + col)
     logic [16:0] clr;
+    // tilemap phases: 0 = priority-0 layers, 1 = sprites, 2 = priority-1 layers
+    logic  [1:0] phase;
+    logic  [2:0] tslot;
+    logic  [5:0] tx;
+    logic  [4:0] ty;
+    logic        tpen;             // pixel rule: plain transparency (priority-1 tilemap)
     logic [23:0] cyc;
 
     // 10-bit signed -> 16-bit
@@ -140,7 +156,12 @@ module nrc_render #(
             // draw pipeline stage 3: framebuffer read data for p3_addr is valid now
             if (p3_valid) begin
                 fb_waddr <= p3_addr;
-                if (merge) begin
+                if (tpen) begin
+                    if (p3_pen != 4'd0) begin
+                        fb_we    <= 1'b1;
+                        fb_wdata <= {1'b0, color, p3_pen};
+                    end
+                end else if (merge) begin
                     fb_we    <= 1'b1;
                     fb_wdata <= {1'b0, (fb_rdata[9:0] | {2'b00, p3_pen, 4'b0000})};
                 end else if (p3_pen != 4'd0 || fb_rdata == UNUSED) begin
@@ -162,7 +183,7 @@ module nrc_render #(
                 S_CLEAR: begin
                     fb_we <= 1'b1; fb_waddr <= clr; fb_wdata <= UNUSED;
                     clr <= clr + 17'd1;
-                    if (clr == 17'd76799) begin st <= S_MAIN_RD; mi <= '0; end
+                    if (clr == 17'd76799) begin st <= S_TM_SLOT; phase <= 2'd0; tslot <= '0; end
                 end
 
                 // spr_addr is registered here and in nrc_spriteram: data is valid two states later
@@ -175,7 +196,7 @@ module nrc_render #(
                     logic [15:0] scx, scy, x, y;
                     for (int k = 0; k < 8; k++) b[k] = spr_data[8*k +: 8];
                     if (b[3][7]) begin
-                        st <= S_DONE;
+                        st <= S_SPR_END;
                     end else begin
                         slot = b[1][3:1];
                         scx = sx10({scroll[{slot, 2'd1}][1:0], scroll[{slot, 2'd0}]});
@@ -205,6 +226,7 @@ module nrc_render #(
                     flipx <= b[3][7];
                     flipy <= b[3][6];
                     merge <= b[5][6];
+                    tpen  <= 1'b0;
                     lw    <= use_sizes ? b[5][3:2] : gw;
                     lh    <= use_sizes ? b[7][3:2] : gh;
                     sx    <= {7'd0, b[5][0], b[4]} + ex;
@@ -266,8 +288,14 @@ module nrc_render #(
                 S_DRAIN: if (!p2_valid && !p3_valid) st <= S_NEXT;   // last pixel written
 
                 S_NEXT: begin
-                    // next tile / next sub entry / next main entry
-                    if (st_is_tile_loop(col, row, lw, lh)) begin
+                    // next tilemap tile / next tile / next sub entry / next main entry
+                    if (phase != 2'd1) begin
+                        if (ty != 5'd28) begin ty <= ty + 5'd1; st <= S_TM_RD; end
+                        else if (tx != 6'd40) begin ty <= '0; tx <= tx + 6'd1; st <= S_TM_RD; end
+                        else if (tslot != 3'd7) begin tslot <= tslot + 3'd1; st <= S_TM_SLOT; end
+                        else if (phase == 2'd0) begin phase <= 2'd1; mi <= '0; st <= S_MAIN_RD; end
+                        else st <= S_DONE;
+                    end else if (st_is_tile_loop(col, row, lw, lh)) begin
                         if (row == 3'((4'd1 << lh) - 4'd1)) begin row <= '0; col <= col + 3'd1; end
                         else row <= row + 3'd1;
                         st <= S_TILE;
@@ -279,8 +307,38 @@ module nrc_render #(
                         mi <= mi + 13'd1;
                         st <= S_MAIN_RD;
                     end else begin
-                        st <= S_DONE;
+                        st <= S_SPR_END;
                     end
+                end
+
+                S_SPR_END: begin phase <= 2'd2; tslot <= '0; st <= S_TM_SLOT; end
+
+                // ---- tilemap layers
+                S_TM_SLOT: begin
+                    if (tm_base[tslot] != 8'd0 && tm_prio[tslot] == (phase == 2'd2)) begin
+                        tx <= 6'd1; ty <= 5'd0; st <= S_TM_RD;
+                    end else if (tslot != 3'd7) tslot <= tslot + 3'd1;
+                    else if (phase == 2'd0) begin phase <= 2'd1; mi <= '0; st <= S_MAIN_RD; end
+                    else st <= S_DONE;
+                end
+                S_TM_RD: begin
+                    // entry e = x*32 + y at byte (reg1 & 15)*0x1000 + 4e -> 8-byte word + half
+                    spr_addr <= {tm_base[tslot][3:0], 9'd0} + {3'd0, tx, ty[4:1]};
+                    st <= S_TM_WAIT;
+                end
+                S_TM_WAIT: st <= S_TM_PARSE;
+                S_TM_PARSE: begin
+                    logic [31:0] e;
+                    e = ty[0] ? spr_data[63:32] : spr_data[31:0];
+                    tileno <= e[15:0];
+                    color  <= e[21:16];
+                    flipx  <= 1'b0;
+                    flipy  <= 1'b0;
+                    merge  <= (phase == 2'd0) && tm_merge[tslot];
+                    tpen   <= (phase == 2'd2);
+                    xpos   <= {7'd0, tx, 3'd0} + 16'(SPR_DX);
+                    ypos   <= {8'd0, ty, 3'd0} + 16'(SPR_DY);
+                    st     <= S_TILE_CHK;
                 end
 
                 S_DONE: begin

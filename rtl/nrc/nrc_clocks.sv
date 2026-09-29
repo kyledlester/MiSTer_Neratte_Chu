@@ -20,7 +20,8 @@ module nrc_clocks #(
     parameter int DEN        = 2205
 ) (
     input  logic        clk,
-    input  logic        rst,
+    input  logic        rst,            // CPU time base / credits (system reset)
+    input  logic        rst_video,      // dot clock divider: PLL loss only, so sync never stops
     input  logic        cpu_stall,      // hold ce_cpu (SDRAM access pending)
     input  logic        turbo,          // simulation only: earn a CPU credit every clock (tie 0)
     output logic        ce_pix,
@@ -41,13 +42,16 @@ module nrc_clocks #(
         tick8  <= 1'b0;
         ce_snd <= 1'b0;
         ce_cpu <= 1'b0;
+        if (rst_video) pdiv <= '0;
+        else begin
+            pdiv <= (pdiv == 4'd13) ? 4'd0 : pdiv + 4'd1;
+            if (pdiv == 4'd13) ce_pix <= 1'b1;
+        end
         if (rst) begin
-            pdiv <= '0; acc <= '0; sdiv <= '0; gap <= '0;
+            acc <= '0; sdiv <= '0; gap <= '0;
             credits <= '0; lost_credits <= '0;
         end else begin
             logic earn, spend;
-            pdiv <= (pdiv == 4'd13) ? 4'd0 : pdiv + 4'd1;
-            if (pdiv == 4'd13) ce_pix <= 1'b1;
 
             earn = 1'b0;
             if (turbo) begin
