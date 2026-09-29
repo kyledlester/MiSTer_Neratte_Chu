@@ -196,8 +196,8 @@ module nrc_core #(
     );
 
     // ------------------------------------------------------------------ display pipeline
-    // x/y change on ce_pix; the pen address is registered the cycle after, framebuffer + palette
-    // deliver RGB 4 cycles later, well inside the 14-cycle dot. The output stage registers RGB and
+    // x/y change on ce_pix; the pen address is ready 2 cycles later, framebuffer + palette deliver
+    // RGB 4 cycles after that, well inside the 14-cycle dot. The output stage registers RGB and
     // the timing signals of the same dot together at the next ce_pix (one dot of delay for all).
     logic [23:0] ov_rgb;
     nrc_overlay overlay (
@@ -207,8 +207,10 @@ module nrc_core #(
         .render_t(dbg_render_ms100), .drops(dbg_snap_drops)
     );
 
+    logic [16:0] row_base;
     always_ff @(posedge clk) begin
-        d_addr <= 17'(vy) * 17'd320 + 17'(vx);
+        row_base <= 17'(vy) * 17'd320;          // two register stages: 14 clk per dot
+        d_addr   <= row_base + 17'(vx);
         if (ce_pix) begin
             hblank <= t_hb;
             vblank <= t_vb;

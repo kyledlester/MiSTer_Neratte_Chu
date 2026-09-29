@@ -8,7 +8,8 @@
 // Bus timing: nrc_cpu raises rd_n/wr_n low right after a cen edge. This module detects the start
 // of each access, stalls the CPU clock enable (cpu_stall) until the access has completed, and
 // presents read data in `din`, which stays valid until the next access. Internal (BRAM/register)
-// accesses complete one cycle after the start; SDRAM accesses when the arbiter acknowledges.
+// accesses complete two cycles after the start (the T80 address/data are registered once first,
+// so no RAM port is driven straight from the T80); SDRAM accesses when the arbiter acknowledges.
 // The credit scheduler (nrc_clocks) repays the stall cycles, so CPU time stays exactly 8 MHz.
 module nrc_st0016 #(
     parameter logic [24:0] CHA_BASE = 25'h0800000
@@ -68,20 +69,25 @@ module nrc_st0016 #(
     output logic [15:0] dbg_dma_count
 );
     // ------------------------------------------------------------------ CPU
-    logic [15:0] a;
-    logic  [7:0] dout, din;
+    logic [15:0] a_cpu, a;       // a / dout: registered copies of the T80 bus (timing: every
+    logic  [7:0] dout_cpu, dout, din;   // consumer below starts from a flop, see B_WAIT)
     logic m1_n, mreq_n, iorq_n, rd_n, wr_n, rfsh_n, halt_n, iff1;
     logic int_n, nmi_n;
 
     nrc_cpu cpu (
         .clk(clk), .reset(reset), .cen(ce_cpu),
         .int_n(int_n), .nmi_n(nmi_n),
-        .di(din), .dout(dout), .a(a),
+        .di(din), .dout(dout_cpu), .a(a_cpu),
         .m1_n(m1_n), .mreq_n(mreq_n), .iorq_n(iorq_n), .rd_n(rd_n), .wr_n(wr_n),
         .rfsh_n(rfsh_n), .halt_n(halt_n), .iff1(iff1), .pc(dbg_pc), .sp()
     );
 
     wire int_ack = !m1_n && !iorq_n;
+
+    always_ff @(posedge clk) begin
+        a    <= a_cpu;
+        dout <= dout_cpu;
+    end
 
     nrc_irq irq (
         .clk(clk), .reset(reset), .ce_pix(ce_pix), .ce_cpu(ce_cpu),
@@ -169,7 +175,7 @@ module nrc_st0016 #(
     );
 
     // ------------------------------------------------------------------ bus
-    typedef enum logic [2:0] {B_IDLE, B_DECODE, B_SDRAM, B_DONE, B_DMA} bstate_t;
+    typedef enum logic [2:0] {B_IDLE, B_WAIT, B_DECODE, B_SDRAM, B_DONE, B_DMA} bstate_t;
     bstate_t bs;
 
     wire acc_req   = !rd_n || !wr_n;
@@ -184,7 +190,7 @@ module nrc_st0016 #(
     wire  [21:0] ext_addr = {rom_bank, a[13:0]};
 
     // stall: from the start cycle until the access is done (DONE state clears it)
-    assign cpu_stall = acc_start || (bs == B_DECODE) || (bs == B_SDRAM) || (bs == B_DMA);
+    assign cpu_stall = acc_start || (bs == B_WAIT) || (bs == B_DECODE) || (bs == B_SDRAM) || (bs == B_DMA);
 
     logic        sd_is_rom;
     logic  [2:0] sd_byte;
@@ -213,7 +219,9 @@ module nrc_st0016 #(
             for (int i = 0; i < 9; i++) dmareg[i] <= 8'd0;
         end else begin
             case (bs)
-                B_IDLE: if (acc_req) bs <= B_DECODE;
+                // B_WAIT: a/dout (registered) and the RAM read ports addressed from them settle
+                B_IDLE: if (acc_req) bs <= B_WAIT;
+                B_WAIT: bs <= B_DECODE;
 
                 B_DECODE: begin
                     bs <= B_DONE;

@@ -63,11 +63,11 @@ module m3_cpu_tb;
 
     // write logger
     int fd, nw = 0, nf = 0;
-    wire [15:0] A = dut.st0016.a;
+    wire [15:0] A = dut.st0016.a_cpu;
     always @(posedge clk) begin
         if (!reset && rom_ready && dut.st0016.bs == 0 && !dut.st0016.wr_n && nw < maxw) begin
-            if (!dut.st0016.iorq_n) $fwrite(fd, "O %02x %02x\n", A[7:0], dut.st0016.dout);
-            else                    $fwrite(fd, "M %04x %02x\n", A, dut.st0016.dout);
+            if (!dut.st0016.iorq_n) $fwrite(fd, "O %02x %02x\n", A[7:0], dut.st0016.dout_cpu);
+            else                    $fwrite(fd, "M %04x %02x\n", A, dut.st0016.dout_cpu);
             nw++;
         end
         if (!reset && rom_ready && dut.vblank_start) begin
