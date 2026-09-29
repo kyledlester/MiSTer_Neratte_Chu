@@ -19,6 +19,7 @@ module nrc_core #(
     input  logic        clk,
     input  logic        init,          // PLL not locked: memory system reset
     input  logic        reset,         // OSD / user / HPS reset
+    input  logic        sim_turbo,     // simulation only: run the CPU time base flat out (tie 0)
     // HPS download
     input  logic        ioctl_download,
     input  logic [15:0] ioctl_index,
@@ -52,7 +53,7 @@ module nrc_core #(
     output logic        rom_ready,
     output logic [15:0] dbg_pc,
     output logic [15:0] dbg_frames,
-    output logic [15:0] dbg_render_ms100,   // last render time in units of 10 us
+    output logic [15:0] dbg_render_ms100,   // last render time in units of 1024 clk_sys = 10.2 us
     output logic [15:0] dbg_snap_drops,
     output logic [15:0] dbg_irqs,
     output logic [15:0] dbg_nmis
@@ -60,7 +61,7 @@ module nrc_core #(
     // ------------------------------------------------------------------ clocks / raster
     logic tick8, ce_snd, ce_cpu, cpu_stall;
     nrc_clocks #(.NUM(CPU_NUM), .DEN(CPU_DEN)) clocks (
-        .clk(clk), .rst(reset), .cpu_stall(cpu_stall),
+        .clk(clk), .rst(reset), .cpu_stall(cpu_stall), .turbo(sim_turbo),
         .ce_pix(ce_pix), .tick8(tick8), .ce_snd(ce_snd), .ce_cpu(ce_cpu),
         .credits(), .lost_credits()
     );
@@ -186,7 +187,7 @@ module nrc_core #(
         .fb_raddr(fb_raddr), .fb_rdata(fb_rdata), .fb_we(fb_we), .fb_waddr(fb_waddr), .fb_wdata(fb_wdata),
         .st_tiles(), .st_fetched(), .st_cycles(r_cycles)
     );
-    assign dbg_render_ms100 = 16'(r_cycles / 1002);
+    assign dbg_render_ms100 = {6'd0, r_cycles[19:10]};   // units of 1024 clk = 10.2 us (no divider)
 
     nrc_framebuffer fb (
         .clk(clk), .r_buf(!front), .r_addr(fb_raddr), .r_rdata(fb_rdata),

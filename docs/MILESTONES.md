@@ -81,6 +81,14 @@ sound registers, I/O mux, one-line extrom read cache).
   palette RAM initialisation. Interrupts are still disabled by the game at that point (first EI at
   about frame 150), so this run does not exercise M6.
 
+## M6 - Interrupts - IMPLEMENTED
+`nrc_irq`: IRQ (HOLD_LINE semantics: held until the IM1 acknowledge cycle) at vblank start; NMIs at
+IRQ + (16 + 64k)/384 of a frame (k = 0..5, MAME's 64-line spacing and phase), delivered only if the
+T80's IFF1 is set at that instant (MAME behaviour), held low for 4 CPU clocks. All constants in one
+module (docs/KNOWN_ISSUES.md U-2). Evidence so far: IRQ count increments once per frame from reset
+while the game runs with interrupts disabled (system bench, frames 1-9); the long real-time system
+run past the game's first EI (MAME frame ~150) is in progress.
+
 ## M8 - Palette - DONE (sim)
 `sim.sh m8`: PASS (5,124 checks): 4 banks x 512 B CPU readback, snapshot copy with CPU writes
 stalled during the 1024-clock copy, pen -> RGB888 = MAME pal5bit, UNUSED_PEN -> colour 0.

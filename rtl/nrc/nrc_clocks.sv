@@ -22,6 +22,7 @@ module nrc_clocks #(
     input  logic        clk,
     input  logic        rst,
     input  logic        cpu_stall,      // hold ce_cpu (SDRAM access pending)
+    input  logic        turbo,          // simulation only: earn a CPU credit every clock (tie 0)
     output logic        ce_pix,
     output logic        tick8,
     output logic        ce_snd,
@@ -49,7 +50,9 @@ module nrc_clocks #(
             if (pdiv == 4'd13) ce_pix <= 1'b1;
 
             earn = 1'b0;
-            if (acc + NUM >= DEN) begin
+            if (turbo) begin
+                earn = (credits < 8'd4);
+            end else if (acc + NUM >= DEN) begin
                 acc  <= acc + NUM - DEN;
                 earn = 1'b1;
                 tick8 <= 1'b1;

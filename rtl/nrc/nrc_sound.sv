@@ -157,12 +157,26 @@ module nrc_sound #(
     logic [63:0] c_data [8];
 
     // ------------------------------------------------------------ engine
-    typedef enum logic [2:0] {E_IDLE, E_VOICE, E_FETCH_A, E_FETCH_B, E_CALC, E_ACC, E_OUT} est_t;
+    // The per-voice work is split into short pipeline states (timing at 100 MHz); a sample has
+    // ~1600 clk_sys of budget and 8 voices need < 200 even with cache misses.
+    typedef enum logic [3:0] {E_IDLE, E_LOAD, E_NP, E_FETCH_A, E_FETCH_B, E_DEC, E_MUL, E_CALC,
+                              E_WB, E_VOL, E_ACC, E_OUT} est_t;
     est_t es;
     logic  [2:0] v;
-    logic [24:0] pos, np;
-    logic [15:0] frac;
+    // local copy of the voice being processed
+    logic        l_act, l_loop, l_lponce;
+    logic [23:0] l_lpstart, l_lpend, l_end;
+    logic [15:0] l_freq;
+    logic  [8:0] l_voll, l_volr;
+    logic [24:0] pos, np, p2;
+    logic [15:0] frac, f2;
     logic  [7:0] ba, bb;
+    logic signed [15:0] sa, sb;
+    logic signed [16:0] diff;
+    logic signed [33:0] prod;
+    logic signed [25:0] ml, mr;
+    logic        hit_lpend, hit_end;
+    logic        touched;          // CPU wrote reg $16 of voice v while it was being processed
     logic signed [19:0] acc_l, acc_r;
     logic signed [15:0] outv;
 
@@ -171,23 +185,11 @@ module nrc_sound #(
     wire a_hit = c_valid[v] && c_tag[v] == a_ofs[20:3];
     wire b_hit = c_valid[v] && c_tag[v] == b_ofs[20:3];
 
-    logic signed [15:0] sa, sb;
-    logic signed [16:0] diff;
-    logic signed [33:0] prod;
-    logic signed [25:0] ml, mr;
-    always_comb begin
-        sa   = decode(ba, nonlinear);
-        sb   = decode(bb, nonlinear);
-        diff = 17'(sb) - 17'(sa);
-        prod = diff * $signed({1'b0, frac});
-        ml   = outv * $signed({1'b0, v_voll[v]});
-        mr   = outv * $signed({1'b0, v_volr[v]});
-    end
-
     // CPU register writes; key-on per MAME voice_t::reg_w (compare with the live flags)
     wire [2:0] wv = cpu_addr[7:5];
     wire [4:0] wr = cpu_addr[4:0];
     wire kon = cpu_we && wr == 5'h16 && cpu_wdata != v_flags[wv] && cpu_wdata != 8'h00;
+    wire flags_wr_v = cpu_we && wr == 5'h16 && wv == v;
 
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -199,19 +201,33 @@ module nrc_sound #(
                 v_pos[i] <= '0; v_frac[i] <= '0; v_lponce[i] <= 1'b0; c_valid[i] <= 1'b0;
             end
         end else begin
+            if (flags_wr_v) touched <= 1'b1;
             // ---------------- engine
             case (es)
                 E_IDLE: if (ce_snd) begin
-                    v <= 3'd0; acc_l <= '0; acc_r <= '0; es <= E_VOICE;
+                    v <= 3'd0; acc_l <= '0; acc_r <= '0; es <= E_LOAD;
                 end
-                E_VOICE: begin
-                    if (v_flags[v][2:1] != 2'b00) begin
-                        pos  <= v_pos[v];
-                        frac <= v_frac[v];
-                        np   <= next_pos(v_pos[v], v_lponce[v], v_lpend[v], v_lpstart[v], v_end[v], v_flags[v][0]);
-                        es   <= E_FETCH_A;
+                E_LOAD: begin
+                    l_act     <= v_flags[v][2:1] != 2'b00;
+                    l_loop    <= v_flags[v][0];
+                    l_lponce  <= v_lponce[v];
+                    l_lpstart <= v_lpstart[v];
+                    l_lpend   <= v_lpend[v];
+                    l_end     <= v_end[v];
+                    l_freq    <= v_freq[v];
+                    l_voll    <= v_voll[v];
+                    l_volr    <= v_volr[v];
+                    pos       <= v_pos[v];
+                    frac      <= v_frac[v];
+                    touched   <= flags_wr_v;
+                    es        <= E_NP;
+                end
+                E_NP: begin
+                    if (l_act) begin
+                        np <= next_pos(pos, l_lponce, l_lpend, l_lpstart, l_end, l_loop);
+                        es <= E_FETCH_A;
                     end else if (v == 3'd7) es <= E_OUT;
-                    else v <= v + 3'd1;
+                    else begin v <= v + 3'd1; es <= E_LOAD; end
                 end
                 E_FETCH_A: begin
                     if (a_hit) begin
@@ -227,7 +243,7 @@ module nrc_sound #(
                 E_FETCH_B: begin
                     if (b_hit) begin
                         bb <= c_data[v][8*b_ofs[2:0] +: 8];
-                        es <= E_CALC;
+                        es <= E_DEC;
                     end else if (!m_req) begin
                         m_req <= 1'b1; m_addr <= CHA_BASE + {4'd0, b_ofs[20:3], 3'd0};
                     end else if (m_ack) begin
@@ -235,20 +251,36 @@ module nrc_sound #(
                         c_valid[v] <= 1'b1; c_tag[v] <= b_ofs[20:3]; c_data[v] <= m_rdata;
                     end
                 end
+                E_DEC: begin
+                    logic signed [15:0] da, db;
+                    da = decode(ba, nonlinear);
+                    db = decode(bb, nonlinear);
+                    sa   <= da;
+                    diff <= 17'(db) - 17'(da);
+                    {f2[15:0]} <= frac + l_freq;                          // low 16 bits
+                    p2   <= pos + 25'((17'(frac) + 17'(l_freq)) >> 16);   // carry into pos
+                    es   <= E_MUL;
+                end
+                E_MUL: begin
+                    prod      <= diff * $signed({1'b0, frac});
+                    hit_lpend <= (p2 >= {1'b0, l_lpend});
+                    hit_end   <= (p2 >= {1'b0, l_end});
+                    es        <= E_CALC;
+                end
                 E_CALC: begin
-                    logic [16:0] f2;
-                    logic [24:0] p2;
                     outv <= 16'(sa + 16'(prod >>> 16));
-                    f2 = {1'b0, frac} + {1'b0, v_freq[v]};
-                    p2 = pos + 25'(f2[16]);
-                    // write back unless the CPU keys this voice on in this very cycle
-                    if (!(kon && wv == v)) begin
-                        v_frac[v] <= f2[15:0];
-                        if (v_lponce[v]) begin
-                            v_pos[v] <= (p2 >= {1'b0, v_lpend[v]}) ? {1'b0, v_lpstart[v]} : p2;
-                        end else if (p2 >= {1'b0, v_end[v]}) begin
-                            if (v_flags[v][0]) begin
-                                v_pos[v] <= {1'b0, v_lpstart[v]};
+                    es   <= E_WB;
+                end
+                E_WB: begin
+                    // write back unless the CPU wrote this voice's flags while it was processed
+                    // (MAME: a register write follows the stream update, so the write wins)
+                    if (!touched && !flags_wr_v) begin
+                        v_frac[v] <= f2;
+                        if (l_lponce) begin
+                            v_pos[v] <= hit_lpend ? {1'b0, l_lpstart} : p2;
+                        end else if (hit_end) begin
+                            if (l_loop) begin
+                                v_pos[v] <= {1'b0, l_lpstart};
                                 v_lponce[v] <= 1'b1;
                             end else begin
                                 v_flags[v] <= 8'h00; v_pos[v] <= '0; v_frac[v] <= '0;
@@ -257,13 +289,18 @@ module nrc_sound #(
                             v_pos[v] <= p2;
                         end
                     end
+                    es <= E_VOL;
+                end
+                E_VOL: begin
+                    ml <= outv * $signed({1'b0, l_voll});
+                    mr <= outv * $signed({1'b0, l_volr});
                     es <= E_ACC;
                 end
                 E_ACC: begin
                     acc_l <= acc_l + 20'(ml >>> 8);
                     acc_r <= acc_r + 20'(mr >>> 8);
                     if (v == 3'd7) es <= E_OUT;
-                    else begin v <= v + 3'd1; es <= E_VOICE; end
+                    else begin v <= v + 3'd1; es <= E_LOAD; end
                 end
                 E_OUT: begin
                     out_l <= (acc_l > 20'sd32767) ? 16'sd32767 : (acc_l < -20'sd32768) ? -16'sd32768 : 16'(acc_l);

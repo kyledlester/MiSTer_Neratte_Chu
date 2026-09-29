@@ -146,6 +146,7 @@ nrc_core core
 	.clk(clk_sys),
 	.init(init),
 	.reset(reset),
+	.sim_turbo(1'b0),
 	.ioctl_download(ioctl_download),
 	.ioctl_index(ioctl_index),
 	.ioctl_wr(ioctl_wr),

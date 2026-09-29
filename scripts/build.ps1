@@ -5,6 +5,15 @@ $ErrorActionPreference='Stop'
 Push-Location (Split-Path $PSScriptRoot -Parent)
 try {
     if(!(Test-Path build)) { New-Item -ItemType Directory build | Out-Null }
+    # Project rule: never start while a Quartus job of another project (e.g. the owner's other cores)
+    # is running on this machine - concurrent fits compete for memory. Wait until they are gone.
+    $others = { Get-CimInstance Win32_Process -Filter "Name like 'quartus%'" |
+                Where-Object { $_.CommandLine -notmatch 'NeratteChu' } }
+    $announced = $false
+    while (& $others) {
+        if (-not $announced) { "Waiting for other Quartus jobs: " + ((& $others | ForEach-Object { $_.CommandLine }) -join ' | '); $announced = $true }
+        Start-Sleep 20
+    }
     $t0=Get-Date
     $qsh=Join-Path $QuartusBin 'quartus_sh.exe'
     cmd /c "`"$qsh`" --flow compile NeratteChu > build\quartus.log 2>&1"

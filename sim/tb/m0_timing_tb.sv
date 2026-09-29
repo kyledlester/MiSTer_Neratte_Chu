@@ -14,7 +14,7 @@ module m0_timing_tb;
     logic [8:0] hcnt, vcnt, x; logic [7:0] y;
     logic hblank, vblank, hsync, vsync, vbs, fs;
 
-    nrc_clocks clocks(.clk(clk), .rst(rst), .cpu_stall(stall), .ce_pix(ce_pix), .tick8(tick8),
+    nrc_clocks clocks(.clk(clk), .rst(rst), .cpu_stall(stall), .turbo(1'b0), .ce_pix(ce_pix), .tick8(tick8),
         .ce_snd(ce_snd), .ce_cpu(ce_cpu), .credits(credits), .lost_credits(lost));
     nrc_video_timing timing(.clk(clk), .rst(rst), .ce_pix(ce_pix), .hcnt(hcnt), .vcnt(vcnt),
         .x(x), .y(y), .hblank(hblank), .vblank(vblank), .hsync(hsync), .vsync(vsync),

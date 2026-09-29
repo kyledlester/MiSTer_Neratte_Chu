@@ -19,6 +19,7 @@ spec() {
     m0)  echo "m0_timing_tb|| rtl/nrc/nrc_clocks.sv rtl/nrc/nrc_video_timing.sv sim/tb/m0_timing_tb.sv" ;;
     m2)  echo "m2_loader_tb|| rtl/nrc/nrc_sdram_arb.sv rtl/nrc/nrc_loader.sv build/sim/sdram_sim.sv sim/models/sdr_sdram_model.sv sim/tb/m2_loader_tb.sv" ;;
     m3)  echo "m3_cpu_tb|$T80| $CORE rtl/nrc/nrc_core.sv sim/tb/m3_cpu_tb.sv" ;;
+    m6)  echo "m6_system_tb|$T80| $CORE rtl/nrc/nrc_core.sv sim/tb/m6_system_tb.sv" ;;
     m8)  echo "m8_palette_tb|| rtl/nrc/nrc_palette.sv sim/tb/m8_palette_tb.sv" ;;
     m10) echo "m10_render_tb|| rtl/nrc/nrc_render.sv rtl/nrc/nrc_framebuffer.sv rtl/nrc/nrc_spriteram.sv sim/tb/m10_render_tb.sv" ;;
     m15) echo "m15_sound_tb|| rtl/nrc/nrc_sound.sv sim/tb/m15_sound_tb.sv" ;;

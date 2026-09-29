@@ -32,7 +32,7 @@ module m3_cpu_tb;
 `endif
     nrc_core #(.EXTROM_END(25'h0008000), .CHA_BASE(25'h0800000), .CHA_END(25'h0800000),
                .CPU_NUM(CN), .CPU_DEN(CD)) dut (
-        .clk(clk), .init(init), .reset(reset),
+        .clk(clk), .init(init), .reset(reset), .sim_turbo(1'b0),
         .ioctl_download(dl), .ioctl_index(16'd0), .ioctl_wr(wr), .ioctl_addr(ioa), .ioctl_dout(iod),
         .ioctl_wait(iowait),
         .sd_addr(sd_addr), .sd_din(sd_din), .sd_be(sd_be), .sd_req(sd_req), .sd_rnw(sd_rnw),
