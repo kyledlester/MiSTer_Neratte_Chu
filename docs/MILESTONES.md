@@ -21,8 +21,11 @@ Evidence and reasons for any re-ordering are recorded per milestone.
 | M13 | Video composition / priorities | DONE for nratechu (sprites only; painter's order + UNUSED pen) |
 | M14 | Inputs / gameplay | IMPLEMENTED, awaiting hardware |
 | M15 | ST-0016 audio engine | DONE (sim, sample-exact vs model) |
-| M16 | First complete playable core | RBF READY, awaiting hardware test (docs/HW_TEST.md) |
-| M17-M20 | Accuracy, CRT, timing closure, release | OPEN |
+| M16 | First complete playable core | HW-CONFIRMED (owner, build 20260928: boots, playable, sound, CRT) |
+| M17 | Accuracy / stability | IN PROGRESS (service menu, loading-screen sync) |
+| M18 | CRT / native video | DONE (sim: 15.734 kHz / 60.054 Hz measured; owner: CRT OK) |
+| M19 | Timing closure | DONE (build 20260929, seed 2: all slacks positive) |
+| M20 | Release candidate | OPEN (see release checklist) |
 
 ## M0 - Repository / toolchain / MiSTer skeleton - DONE (2026-09-28)
 

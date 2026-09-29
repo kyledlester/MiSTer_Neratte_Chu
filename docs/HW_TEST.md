@@ -1,10 +1,16 @@
 # Hardware test procedure (DE10-Nano / MiSTer)
 
+## History
+| Build | Result |
+|---|---|
+| NeratteChu_20260928 | owner test: boots, fully playable, sound OK, CRT OK; service menu showed only its background page; MiSTer loading screen not visible on CRT |
+| NeratteChu_20260929 | service menu (tilemap layer) implemented; sync kept during ROM loading (CRT loading screen); CRT timing measured (m9) |
+
 ## Files to copy
 
 | File (repository) | Copy to (MiSTer SD card) |
 |---|---|
-| `releases/NeratteChu_20260928.rbf` | `/media/fat/_Arcade/cores/NeratteChu_20260928.rbf` |
+| `releases/NeratteChu_20260929.rbf` | `/media/fat/_Arcade/cores/NeratteChu_20260929.rbf` |
 | `mra/Neratte Chu (ver. 1.10).mra` | `/media/fat/_Arcade/Neratte Chu (ver. 1.10).mra` |
 | `nratechu.zip` (your MAME set) | `/media/fat/games/mame/nratechu.zip` (or `/media/fat/_Arcade/mame/`) |
 
@@ -45,7 +51,11 @@ One yellow line at the top: `R<r> P<pppp> F<ffff> I<iiii> N<nnnn> T<tttt> D<dddd
 
 ## Build under test
 
-`releases/NeratteChu_20260928.rbf` (SHA-1 8f9310158cb296d873e1bfc8185303218f7b5a85): Quartus 17.0 Lite,
-timing met (core clock setup +0.318 ns, hold +0.253 ns; SDRAM +1.841 / +3.212 ns); 11,729 ALMs,
-459/553 M10K. Simulation regression `sh scripts/sim.sh all`: 0 failing; system sim from reset
-reproduces MAME frame 250 (Seta logo) pen-for-pen.
+`releases/NeratteChu_20260929.rbf` (SHA-1 72268e925047657118073c62d0c95bb69ec2fdda): Quartus 17.0 Lite, fitter seed 2, all timing met
+(core clock setup +0.451 ns, hold +0.247 ns; SDRAM +1.824 / +3.212 ns); 11,967 ALMs, 462/553 M10K.
+Simulation regression `sh scripts/sim.sh all`: 0 failing.
+
+## Service mode (DIP "Service Mode" = On)
+Expected: "---[ TEST MODE ]---" menu (SYSTEM / DISPLAY / INPUT / OUTPUT / SOUND TEST), P1 up/down to
+select, Button 1 to enter, Start to exit a test. Text is upright (MAME draws it upside down; see
+docs/ST0016_VIDEO.md).
