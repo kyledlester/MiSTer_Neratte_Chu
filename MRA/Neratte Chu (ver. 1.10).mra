@@ -8,7 +8,7 @@
       080000-0FFFFF  zero (not populated in this range)
       100000-1FFFFF  sx012-02 (u32)
       200000-3FFFFF  zero (U33/U34 not populated) - written by the core's loader, not streamed
-  Stream offset == external ROM byte address (docs/MEMORY_MAP.md).
+  Stream offset == external ROM byte address (docs/ST0016_HARDWARE.md).
 
   DIP switches (index 254): byte 0 = DSW1, byte 1 = DSW2, stored as MAME's port values
   (active low). Defaults are MAME's: DSW1 = FF, DSW2 = DF (Demo Sounds On, as MAME).

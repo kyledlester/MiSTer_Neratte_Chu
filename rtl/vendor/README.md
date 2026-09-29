@@ -1,14 +1,14 @@
 # Vendored RTL
 
 All files here are byte-identical to their upstream copies; the project never edits them. Details,
-licences and reasons: [docs/REUSE_AND_LICENSES.md](../../docs/REUSE_AND_LICENSES.md).
+licences and reasons: [docs/REFERENCES.md](../../docs/REFERENCES.md).
 
 ## `t80/` - T80 Z80 core (v351)
 
 Upstream: github.com/MiSTer-devel/ZX-Spectrum_MISTer `rtl/T80/` at
 `d41751d0afc8abf75f31ff1094bf9731e7a1695c`. Authors: Daniel Wallner, MikeJ, TobiFlex, Sorgelig, brNX.
 BSD-style licence (see file headers; the synthesized-form notice is reproduced in
-docs/REUSE_AND_LICENSES.md).
+docs/REFERENCES.md).
 
 Used files: `T80_Pack.vhd`, `T80_ALU.vhd`, `T80_Reg.vhd`, `T80_MCode.vhd`, `T80.vhd`. `T80s.vhd` is
 kept for reference: `rtl/nrc/nrc_cpu.sv` instantiates `T80` directly and re-implements the T80s

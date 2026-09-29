@@ -1,92 +1,64 @@
 # Architecture
 
-Neratte Chu (Seta, 1996) runs on one Seta **ST-0016**: a Z80-compatible CPU with integrated sprite
-video, DMA and 8-voice PCM sound, plus external program/graphics ROM (4 MiB space), 1-2 MiB DRAM
-("character RAM"), 64 KiB sprite SRAM and 8 KiB work SRAM. The core reproduces the MAME model
-(docs/MAME_REFERENCE.md) with the timing of the real board where the game's own programming
-reveals it.
-
-## Block diagram
-
-```
- MiSTer HPS (ioctl) --> nrc_loader --+                         +--> nrc_sound (8 voices) --> AUDIO_L/R
-                                     v                         |       ^ sample reads
-                                 nrc_sdram_arb --> sdram.sv --> SDRAM (extrom 4 MiB, charram 2 MiB)
-                                     ^      ^      ^
-                          CPU bank/charram  |   renderer tile reads
-                                     |      |      |
-   T80 (nrc_cpu) -- nrc_st0016_bus --+   DMA?      |
-        |  fixed ROM BRAM, work RAM, sound regs,   |
-        |  palette RAM, sprite RAM (live), vregs    |
-        |                                           |
-   nrc_irq (IRQ at vblank, NMI x6/frame)     nrc_render (sprite list -> framebuffer, at vblank)
-                                                    | uses sprite RAM render copy + scroll snapshot
-                                                    v
-                                     double framebuffer (11-bit pens) + palette snapshot
-                                                    v
-                                   nrc_video_timing 455x262 -> arcade_video -> HDMI / analog
-```
+The core implements the Seta ST-0016 arcade board as used by Neratte Chu, for MiSTer (DE10-Nano with
+an SDRAM module). The ST-0016 is one chip containing a Z80-compatible CPU, a sprite/tilemap video
+engine, a DMA unit and an 8-voice PCM sound engine. MAME's `simple_st0016.cpp` / `st0016.cpp` drivers
+(0.289) are the behavioural reference; where the core copies a MAME behaviour that is not known to be
+physical, the source comments and [ST0016_HARDWARE.md](ST0016_HARDWARE.md) say so.
 
 ## Clocks
 
-| Clock | Rate | Source |
-|---|---|---|
-| `clk_sys` | 100.227273 MHz = 42.9545 x 7/3 | `nrc_pll` (fractional altera_pll) |
-| dot clock `ce_pix` | 7.159091 MHz = clk_sys / 14 (exact) | NTSC dot clock implied by the CRT registers |
-| CPU `ce_cpu` | 8.000000 MHz average (credit-scheduled, catches up after SDRAM stalls) | MAME: 48 MHz / 6, "verified from nratechu" |
-| sound `ce_snd` | 62.5 kHz = 8 MHz / 128 | MAME stream rate |
+`clk_sys` is 100.227 MHz (42.9545 MHz x 7/3) from `rtl/nrc/nrc_pll.sv`. Clock enables in
+`nrc_clocks.sv` derive:
 
-## Interrupts
+* the 7.159 MHz dot clock (`clk_sys`/14 exactly; 42.9545 MHz / 6 on the PCB);
+* the 8 MHz Z80 clock (48 MHz / 6 on the PCB) as an exact average, with credit catch-up after
+  SDRAM wait states;
+* the 62.5 kHz sound sample rate (8 MHz / 128).
 
-MAME (`st0016_state::interrupt`, 384 fictitious lines, 60 Hz): IRQ0 (HOLD_LINE; the game uses IM 1,
-so RST 38) at line 240 = the moment MAME renders the frame; NMI pulse at lines 0, 64, 128, 192, 256,
-320 **only if IFF1 = 1** (MAME calls this a "dirty hack"; the real NMI source is unknown).
-The NMI handler (`$0066`) drives the music/sound sequencer (every 4th NMI).
+Video is 455 x 262 dots (15.734 kHz, 60.05 Hz) with a 320 x 240 picture: the totals the game itself
+programs into the ST-0016's CRT registers.
 
-FPGA (`nrc_irq`): IRQ asserted at the start of vblank (line 256 of the 262-line raster), released on
-the interrupt-acknowledge cycle. NMIs keep MAME's *phase relative to the IRQ* as a fraction of the
-frame: NMI k at `IRQ + (16 + 64k)/384` of a frame (k = 0..5), gated on T80 `IntE` (IFF1) at that
-instant. [APPROXIMATION, isolated in nrc_irq; MAME-compatible rate and phase]
+## Main blocks
 
-## Video architecture: frame renderer + double framebuffer
+| Block | Files | Notes |
+| --- | --- | --- |
+| MiSTer glue | `NRC.sv` | `hps_io`, OSD options, ROM download, DIP switches, pause, CRT Adjust, video/audio out |
+| System | `nrc_core.sv` | clocks, raster, loader, SDRAM arbiter, ST-0016, renderer, framebuffers, display, overlay |
+| Z80 | `rtl/vendor/t80/`, `nrc_cpu.sv` | T80 core; the wrapper exposes IFF1 for the NMI gating |
+| ST-0016 CPU side | `nrc_st0016.sv` | bus state machine, memory/I-O decode, ROM/sprite/character/palette banking, video registers, DMA, fixed-ROM and work RAM |
+| Interrupts | `nrc_irq.sv` | vblank IRQ and the sound-sequencer NMIs (MAME's scheme, see ST0016_HARDWARE.md) |
+| Inputs | `nrc_inputs.sv` | players, coins, DIP multiplexer |
+| SDRAM | `rtl/vendor/sdram.sv`, `nrc_sdram_arb.sv`, `nrc_loader.sv` | 4 MiB program/graphics ROM image and 2 MiB character RAM; five clients |
+| Sprite RAM | `nrc_spriteram.sv` | 64 KiB, live copy for the CPU and a render copy updated through a write FIFO, so each render sees sprite RAM exactly as it was at the vblank IRQ |
+| Palette | `nrc_palette.sv` | 1024 colours, snapshot per rendered frame |
+| Renderer | `nrc_render.sv`, `nrc_framebuffer.sv` | draws each frame (tilemaps, sprite list incl. the 8-bpp merge mode) into a double framebuffer |
+| Sound | `nrc_sound.sv` | 8 voices, non-linear samples, interpolation, stereo |
+| Video out | `nrc_video_timing.sv`, `nrc_crt_adjust.sv` | raster, Flip Screen, CRT Adjust |
+| Diagnostics | `nrc_overlay.sv` | OSD "Debug overlay": ROM, PC, frame, IRQ/NMI and render counters |
 
-MAME renders the whole frame instantaneously at the vblank IRQ from the RAM state at that moment.
-The FPGA renderer does the same work in a bounded time **from a snapshot**:
-- Sprite RAM exists twice in BRAM: the *live* copy (CPU reads/writes) and the *render* copy. Every
-  CPU write goes to the live copy immediately and into a FIFO that is applied to the render copy
-  only while the renderer is idle. At the vblank IRQ instant, the FIFO position is marked; the
-  renderer starts once all older writes are applied, and later writes wait in the FIFO until it
-  finishes. Result: the render copy equals live sprite RAM at the IRQ instant, exactly MAME's
-  snapshot, without ever stalling the CPU.
-- The scroll registers (`$40-$5F`) and the palette are snapshotted at the same instant.
-- The renderer clears the back buffer to UNUSED_PEN, walks the sprite list and draws into an
-  11-bit-per-pixel framebuffer (pen 0-1023 + UNUSED), reading character data from SDRAM.
-- The buffers swap at the start of the next displayed frame after completion; the display side
-  converts pens through the palette snapshot taken for that frame.
+## Rendering and latency
 
-Latency: one frame more than the (line-rendering) PCB. Character RAM is *not* snapshotted (2 MiB);
-writes to it during a render affect that render (MAME: instantaneous). [DECISION, documented]
+The ST-0016 has no framebuffer RAM on the PCB, so it presumably draws each line just ahead of the
+beam. MAME draws the whole frame at the vblank interrupt. The core does what MAME does: at the vblank
+interrupt it takes a snapshot of sprite RAM, the scroll/tilemap registers and the palette, draws the
+frame into a back buffer (typically 1.4-4 ms), and shows it from the next frame. The picture is
+therefore one frame later than on the PCB; the delay is constant. A render that finishes inside the
+22-line vertical blank was evaluated and rejected: the heaviest screens need more pixel updates than
+that window allows.
 
-Why not a line renderer: the ST-0016 list format (arbitrary sizes, painter's order, OR-merge 8-bpp
-mode, a 64 KiB list walk) needs the full list per line; a frame renderer has ~7x headroom
-(152k pixels/frame vs. >1.2M pixel slots/frame) and reproduces MAME's snapshot semantics exactly.
+## Development history
 
-## Memory
+The source comments reference design notes (`docs/MILESTONES.md`, `docs/KNOWN_ISSUES.md`,
+`docs/MEMORY_MAP.md`, ...), MAME tracing scripts, Python golden models of the video and sound
+hardware, and simulation benches that need the ROM set or MAME captures. They were removed from the
+tree before the public release and remain in the git history, e.g.:
 
-| Store | Size | Where | Why |
-|---|---|---|---|
-| extrom | 4 MiB | SDRAM | too big for BRAM; banked CPU reads and DMA source |
-| fixed ROM window | 32 KiB | BRAM copy of extrom `0000-7FFF` | nearly all opcode fetches; no SDRAM wait |
-| character RAM | 2 MiB | SDRAM | too big for BRAM; CPU window, renderer, sound |
-| sprite RAM | 2 x 64 KiB | BRAM | renderer needs 8-byte entries per clock + snapshot |
-| work RAM | 8 KiB (E000-E87F, F000-FFFF) | BRAM | |
-| palette | 2 KiB live + 2 x 1024 x 15 bit snapshots | BRAM | |
-| framebuffers | 2 x 320 x 240 x 11 bit | BRAM | |
+```bash
+git show b3eee91:docs/MILESTONES.md
+git show b3eee91:scripts/research/st0016_ref.py
+```
 
-SDRAM clients (fixed priority): loader > CPU > DMA > sound > renderer. The CPU is stalled (credit
-scheduler) while its SDRAM access is outstanding.
-
-## Reset
-
-`reset` (OSD/HPS/button/download) holds CPU, video and sound; SDRAM contents survive. Each ROM
-download re-zeroes character RAM and the extrom padding.
+The benches that need no game data are in `sim/tb/` (`sh scripts/sim.sh all`, ModelSim-Intel FPGA
+Starter from the Quartus 17.0 install). `rtl/nrc/nrc_sound.sv`'s volume table is generated by
+`scripts/gen_sound_tables.py`; `scripts/mra/check_mra.py` checks the MRA against a ROM zip.
