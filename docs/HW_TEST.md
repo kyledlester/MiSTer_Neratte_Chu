@@ -4,7 +4,7 @@
 
 | File (repository) | Copy to (MiSTer SD card) |
 |---|---|
-| `releases/NeratteChu_<date>.rbf` | `/media/fat/_Arcade/cores/NeratteChu_<date>.rbf` |
+| `releases/NeratteChu_20260928.rbf` | `/media/fat/_Arcade/cores/NeratteChu_20260928.rbf` |
 | `mra/Neratte Chu (ver. 1.10).mra` | `/media/fat/_Arcade/Neratte Chu (ver. 1.10).mra` |
 | `nratechu.zip` (your MAME set) | `/media/fat/games/mame/nratechu.zip` (or `/media/fat/_Arcade/mame/`) |
 
@@ -33,7 +33,7 @@ One yellow line at the top: `R<r> P<pppp> F<ffff> I<iiii> N<nnnn> T<tttt> D<dddd
 | F | frames displayed (renders completed) | increments ~60/s |
 | I | vblank IRQs raised | increments ~60/s from power-on |
 | N | NMIs delivered (only while IFF1 = 1) | 0 during boot, then ~4-6 per frame |
-| T | last render time in 10 us units | <= 0x190 (4 ms); 0x4D0 at boot (empty sprite RAM = 8192 tiles) |
+| T | last render time in units of 1024 clk_sys (10.2 us) | ~0x4BA (12.4 ms) during the black boot phase (all-zero sprite RAM = 8192 tiles); ~0x90 on the Seta logo; <= 0x190 (4 ms) in attract/game |
 | D | render snapshots dropped (render still busy at vblank) | 0 after boot |
 
 ## What to report
@@ -42,3 +42,10 @@ One yellow line at the top: `R<r> P<pppp> F<ffff> I<iiii> N<nnnn> T<tttt> D<dddd
 2. Coin + Start: does the game start, do the joystick and buttons work?
 3. Sound: music / effects present? distorted? correct pitch?
 4. If anything fails: the overlay line (photo), and at which step it stopped.
+
+## Build under test
+
+`releases/NeratteChu_20260928.rbf` (SHA-1 8f9310158cb296d873e1bfc8185303218f7b5a85): Quartus 17.0 Lite,
+timing met (core clock setup +0.318 ns, hold +0.253 ns; SDRAM +1.841 / +3.212 ns); 11,729 ALMs,
+459/553 M10K. Simulation regression `sh scripts/sim.sh all`: 0 failing; system sim from reset
+reproduces MAME frame 250 (Seta logo) pen-for-pen.

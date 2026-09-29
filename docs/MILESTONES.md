@@ -21,7 +21,7 @@ Evidence and reasons for any re-ordering are recorded per milestone.
 | M13 | Video composition / priorities | DONE for nratechu (sprites only; painter's order + UNUSED pen) |
 | M14 | Inputs / gameplay | IMPLEMENTED, awaiting hardware |
 | M15 | ST-0016 audio engine | DONE (sim, sample-exact vs model) |
-| M16 | First complete playable core | OPEN |
+| M16 | First complete playable core | RBF READY, awaiting hardware test (docs/HW_TEST.md) |
 | M17-M20 | Accuracy, CRT, timing closure, release | OPEN |
 
 ## M0 - Repository / toolchain / MiSTer skeleton - DONE (2026-09-28)

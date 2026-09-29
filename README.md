@@ -3,7 +3,8 @@
 MiSTer FPGA arcade core for **Neratte Chu** (ねらってチュー, Seta 1996, MAME `nratechu`), a Seta
 **ST-0016** system (Z80-compatible CPU + sprite video + 8-voice PCM on one chip).
 
-Status: under development - see [docs/MILESTONES.md](docs/MILESTONES.md).
+Status: first complete build (`releases/NeratteChu_20260928.rbf`) awaiting its first hardware test;
+simulation-verified against MAME (see [docs/MILESTONES.md](docs/MILESTONES.md), [docs/HW_TEST.md](docs/HW_TEST.md)).
 
 ## ROM
 
