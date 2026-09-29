@@ -76,11 +76,25 @@ module nrc_overlay (
         return (r == 3'd7) ? 5'd0 : g[34 - 5*r -: 5];
     endfunction
 
-    wire        in_band = (y >= 8'd2) && (y < 8'd10);
-    wire  [5:0] cix    = 6'((x - 9'd4) >> 3);
-    wire  [2:0] cx      = 3'(x - 9'd4);
-    wire  [2:0] cy      = 3'(y - 8'd2);
-    wire  [4:0] row     = (cix < NCH) ? glyph(text[cix], cy) : 5'd0;
-    wire        on      = in_band && x >= 9'd4 && cix < NCH && cx < 3'd5 && row[3'd4 - cx];
-    always_comb rgb_out = !enable ? rgb_in : on ? 24'hFFFF40 : in_band ? {1'b0, rgb_in[23:17], 1'b0, rgb_in[15:9], 1'b0, rgb_in[7:1]} : rgb_in;
+    // Pipelined (x/y are stable for 14 clk_sys per dot; rgb_out is sampled at the next ce_pix):
+    // stage 1 cell/row indices, stage 2 character code, stage 3 glyph row, stage 4 pixel.
+    logic        in_band1, xin1, in_band2, xin2, in_band3, xin3, in_band4, on4;
+    logic  [5:0] cix1;
+    logic  [2:0] cx1, cy1, cx2, cy2, cx3;
+    logic  [4:0] ch2, row3;
+    always_ff @(posedge clk) begin
+        in_band1 <= (y >= 8'd2) && (y < 8'd10);
+        xin1     <= (x >= 9'd4) && (x < 9'd4 + 9'(8 * NCH));
+        cix1     <= 6'((x - 9'd4) >> 3);
+        cx1      <= 3'(x - 9'd4);
+        cy1      <= 3'(y - 8'd2);
+        in_band2 <= in_band1; xin2 <= xin1; cx2 <= cx1; cy2 <= cy1;
+        ch2      <= xin1 ? text[cix1] : BL;
+        in_band3 <= in_band2; xin3 <= xin2; cx3 <= cx2;
+        row3     <= glyph(ch2, cy2);
+        in_band4 <= in_band3;
+        on4      <= in_band3 && xin3 && cx3 < 3'd5 && row3[3'd4 - cx3];
+    end
+    always_comb rgb_out = !enable ? rgb_in : on4 ? 24'hFFFF40 :
+                          in_band4 ? {1'b0, rgb_in[23:17], 1'b0, rgb_in[15:9], 1'b0, rgb_in[7:1]} : rgb_in;
 endmodule

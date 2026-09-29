@@ -36,4 +36,12 @@ set nrc_t80 [get_keepers -nocase {*|nrc_cpu:cpu|T80:u0|*}]
 set_multicycle_path -setup 3 -from $nrc_t80 -to $nrc_t80
 set_multicycle_path -hold  2 -from $nrc_t80 -to $nrc_t80
 
+# ---------------------------------------------------------------------------
+# Framework HQ2x Blend (sys/hq2x.sv inside arcade_video). Same constraint and reasoning as the owner's
+# hardware-proven NA-1 core at 100 MHz: Blend only advances on the scandoubler's 4x pixel enable
+# (4 x 7.159 MHz = every 3-4 clk_sys cycles, never on consecutive cycles), so its internal
+# register-to-register paths have at least two clocks.
+set_multicycle_path -setup 2 -from [get_registers {*|Hq2x:Hq2x|Blend:blender|*}]     -to [get_registers {*|Hq2x:Hq2x|Blend:blender|*}]
+set_multicycle_path -hold 1 -from [get_registers {*|Hq2x:Hq2x|Blend:blender|*}]     -to [get_registers {*|Hq2x:Hq2x|Blend:blender|*}]
+
 derive_clock_uncertainty
