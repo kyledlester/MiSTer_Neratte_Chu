@@ -133,3 +133,26 @@ through RTL and `st0016_snd_ref.py`: **identical** (10,951 non-silent).
   cycles / PC trace with MAME.
 - **M4**: complete CPU map incl. banked ROM, sprite/palette/char windows, I/O; MAME I/O write trace of
   the first 300 frames must match the RTL trace (ports, values, order).
+
+## M17/M18 round 2 (2026-09-29): Flip Screen, CRT Adjust, Pause
+
+- **Flip Screen** (DIP SW2:7): MAME with the DIP On shows an upright picture while the game writes
+  CRT register `$74 = $59`, i.e. the PCB flips in hardware. `nrc_st0016` decodes `$74` bits 7-5,
+  `nrc_core` reads the displayed framebuffer rotated 180 degrees (latched per frame in blanking).
+- **CRT Adjust** (OSD submenu, same bits/encodings as the owner's NA-1/NA-2 core): vendored unmodified
+  `crt_adjust.sv`, glue `nrc_crt_adjust.sv` (NA-1 port: SYNCSHIFT, NCO read rate). Three raster/glue
+  changes were needed, all found by the new sweep bench `sim/tb/m17_crt_tb.sv`:
+  1. the line number advances at the HSync edge (vblank/vsync change on HSync), so each
+     HSync-to-HSync window holds exactly one line;
+  2. front porch 39 -> 49 dots (HSync 369-402, back porch 52), so H-Position -48 keeps HSync out of the
+     picture (NA-1 has 48);
+  3. vertical blank of the written / read line (as the owner's NB-1 glue) and a widening-dependent
+     H-Position limit (the picture stops moving before it would cross the next HSync).
+  `sim.sh m17`: **PASS, 59 settings / 4,545,655 checks** (every H-Size at H-Position -8 and +7, a mid
+  grid, V-Shift -8/-1/+7, Off): line 6370 clk, 262 lines, HSync 34 dots, VSync 3 lines in every
+  setting; 240 whole lines, x 0..319 in order, no picture during HSync.
+- **Pause** (vendored `pause.v`, JimmyStones): Pause button (joystick bit 10, both players), optional
+  pause while the OSD is open, dim after 10 s. `nrc_clocks` freezes the CPU time base (no credits earned
+  or spent, no sound tick), `nrc_core` withholds the frame event (no IRQ/NMI, snapshot, render or buffer
+  swap) and mutes the audio. `sim.sh m0`: pause freezes ce_cpu/ce_snd and credits, raster keeps
+  running, no catch-up burst on release.

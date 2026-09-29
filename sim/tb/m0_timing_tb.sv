@@ -10,11 +10,12 @@ module m0_timing_tb;
     always #4.989 clk = ~clk;   // ~100.227 MHz
 
     logic ce_pix, tick8, ce_snd, ce_cpu, stall;
+    logic pause_i = 0;
     logic [7:0] credits; logic [15:0] lost;
     logic [8:0] hcnt, vcnt, x; logic [7:0] y;
     logic hblank, vblank, hsync, vsync, vbs, fs;
 
-    nrc_clocks clocks(.clk(clk), .rst(rst), .rst_video(rst), .cpu_stall(stall), .turbo(1'b0), .ce_pix(ce_pix), .tick8(tick8),
+    nrc_clocks clocks(.clk(clk), .rst(rst), .rst_video(rst), .cpu_stall(stall), .turbo(1'b0), .pause(pause_i), .ce_pix(ce_pix), .tick8(tick8),
         .ce_snd(ce_snd), .ce_cpu(ce_cpu), .credits(credits), .lost_credits(lost));
     nrc_video_timing timing(.clk(clk), .rst(rst), .ce_pix(ce_pix), .hcnt(hcnt), .vcnt(vcnt),
         .x(x), .y(y), .hblank(hblank), .vblank(vblank), .hsync(hsync), .vsync(vsync),
@@ -54,7 +55,7 @@ module m0_timing_tb;
                     if (clks - last_cpu < mingap) mingap = clks - last_cpu;
                     last_cpu = clks; cpus++;
                 end
-                if (vbs) begin vbss++; check(vcnt == 256 && hcnt == 0, "vblank_start at (0,256)"); end
+                if (vbs) begin vbss++; check(vcnt == 256 && hcnt == 369, "vblank_start at line 256 HSync"); end
             end while (!fs);
             frames++;
         end
@@ -69,6 +70,25 @@ module m0_timing_tb;
         check(lost == 0, "no lost credits");
         $display("M0: clks=%0d dots=%0d ticks8=%0d ce_cpu=%0d credits=%0d snd=%0d (%.4f MHz cpu @100.227)",
                  clks, pixs, ticks, cpus, credits, snds, cpus * 100.227272 / clks);
+        // pause: CPU time base frozen, no sound ticks, ce_pix (raster) keeps running
+        begin
+            int pc = 0, ps = 0, pp = 0, burst = 0;
+            logic [7:0] cr0;
+            @(posedge clk); pause_i = 1; @(posedge clk); @(posedge clk); cr0 = credits;
+            repeat (200000) begin
+                @(posedge clk);
+                if (ce_cpu) pc++;
+                if (ce_snd) ps++;
+                if (ce_pix) pp++;
+            end
+            check(pc == 0 && ps == 0, $sformatf("pause: ce_cpu %0d ce_snd %0d", pc, ps));
+            check(credits == cr0, "pause: credits frozen");
+            check(pp > 14000, "pause: raster keeps running");
+            pause_i = 0;
+            // after release: no catch-up burst (at most the frozen credits + normal rate)
+            repeat (100000) begin @(posedge clk); if (ce_cpu) burst++; end
+            check(burst <= (100000 * 176) / 2205 + cr0 + 2, $sformatf("resume: %0d ce_cpu in 100000 clk", burst));
+        end
         if (errors == 0) $display("PASS M0 TIMING: %0d checks", checks);
         else $display("FAIL M0 TIMING: %0d of %0d checks failed", errors, checks);
         $finish;

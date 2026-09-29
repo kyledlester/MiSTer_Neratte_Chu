@@ -15,6 +15,9 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/nrc/nrc_render.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/nrc/nrc_framebuffer.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/nrc/nrc_overlay.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/nrc/nrc_core.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/crt_adjust.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nrc/nrc_crt_adjust.sv
+set_global_assignment -name VERILOG_FILE rtl/vendor/pause.v
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/vendor/sdram.sv
 set_global_assignment -name VHDL_FILE rtl/vendor/t80/T80_Pack.vhd
 set_global_assignment -name VHDL_FILE rtl/vendor/t80/T80_ALU.vhd

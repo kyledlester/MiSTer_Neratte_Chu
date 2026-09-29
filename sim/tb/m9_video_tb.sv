@@ -21,8 +21,8 @@ module m9_video_tb;
         .ioctl_wait(iowait),
         .sd_addr(sd_addr), .sd_din(sd_din), .sd_be(sd_be), .sd_req(sd_req), .sd_rnw(sd_rnw),
         .sd_dout('0), .sd_ready(1'b0),
-        .joy0('0), .joy1('0), .dbg_overlay(1'b0),
-        .ce_pix(ce_pix), .rgb(rgb), .hblank(hb), .vblank(vb), .hsync(hs), .vsync(vs),
+        .joy0('0), .joy1('0), .dbg_overlay(1'b0), .pause(1'b0),
+        .ce_pix(ce_pix), .rgb(rgb), .hblank(hb), .vblank(vb), .hsync(hs), .vsync(vs), .vb_next(),
         .snd_l(), .snd_r(), .rom_ready(rom_ready),
         .dbg_pc(), .dbg_frames(), .dbg_render_ms100(), .dbg_snap_drops(), .dbg_irqs(), .dbg_nmis());
 
@@ -57,11 +57,11 @@ module m9_video_tb;
                     if (vs) vs_lines++;
                     dots = 0;
                 end
+                if (hs && !phs) hs_len = 0;          // count only pulses whose start was seen
                 if (hs) hs_len++;
-                if (!hs && phs) begin
+                if (!hs && phs && lastrise >= 0) begin
                     if (hs_len < hsw_min) hsw_min = hs_len;
                     if (hs_len > hsw_max) hsw_max = hs_len;
-                    hs_len = 0;
                 end
                 if (!hb && !vb) dots++;
                 if (vs && !pvs) break;           // next frame's vsync rise

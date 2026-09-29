@@ -39,6 +39,7 @@ module nrc_core #(
     input  logic [31:0] joy0,
     input  logic [31:0] joy1,
     input  logic        dbg_overlay,
+    input  logic        pause,         // freeze the game: CPU, interrupts, renders, sound (pause.v)
     // video
     output logic        ce_pix,
     output logic [23:0] rgb,
@@ -46,6 +47,7 @@ module nrc_core #(
     output logic        vblank,
     output logic        hsync,
     output logic        vsync,
+    output logic        vb_next,       // vertical blank of the next line (CRT Adjust)
     // audio
     output logic signed [15:0] snd_l,
     output logic signed [15:0] snd_r,
@@ -61,7 +63,7 @@ module nrc_core #(
     // ------------------------------------------------------------------ clocks / raster
     logic tick8, ce_snd, ce_cpu, cpu_stall;
     nrc_clocks #(.NUM(CPU_NUM), .DEN(CPU_DEN)) clocks (
-        .clk(clk), .rst(reset), .rst_video(init), .cpu_stall(cpu_stall), .turbo(sim_turbo),
+        .clk(clk), .rst(reset), .rst_video(init), .cpu_stall(cpu_stall), .turbo(sim_turbo), .pause(pause),
         .ce_pix(ce_pix), .tick8(tick8), .ce_snd(ce_snd), .ce_cpu(ce_cpu),
         .credits(), .lost_credits()
     );
@@ -139,12 +141,15 @@ module nrc_core #(
     logic render_busy, render_go, render_done;
     // Buffer the palette snapshot / next render go to: the back buffer after this event's swap.
     wire  new_front = frame_ready ? !front : front;
-    wire  snap_ok   = vblank_start && !render_busy;
+    // Pause: the frame event is withheld, so no IRQ/NMI, no snapshot, no render and no buffer swap
+    // happen - the last frame stays on screen and nothing is pending when the game resumes.
+    wire  vbl_ev    = vblank_start && !pause;
+    wire  snap_ok   = vbl_ev && !render_busy;
     always_ff @(posedge clk) begin
         if (sys_reset) begin
             front <= 1'b0; frame_ready <= 1'b0; have_frame <= 1'b0; dbg_frames <= '0;
         end else begin
-            if (vblank_start && frame_ready) begin
+            if (vbl_ev && frame_ready) begin
                 front <= !front; frame_ready <= 1'b0; have_frame <= 1'b1;
                 dbg_frames <= dbg_frames + 16'd1;
             end
@@ -159,23 +164,27 @@ module nrc_core #(
     logic  [7:0] tm_base_snap [8];
     logic  [7:0] tm_prio_snap, tm_merge_snap;
     logic [16:0] d_addr;
+    logic signed [15:0] snd_l_i, snd_r_i;
+    logic        flip_screen;
+    assign snd_l = pause ? 16'sd0 : snd_l_i;     // muted while paused
+    assign snd_r = pause ? 16'sd0 : snd_r_i;
     logic [10:0] d_pen;
     logic [23:0] d_rgb;
 
     nrc_st0016 #(.CHA_BASE(CHA_BASE)) st0016 (
-        .clk(clk), .reset(sys_reset), .ce_cpu(ce_cpu), .ce_pix(ce_pix), .ce_snd(ce_snd),
+        .clk(clk), .reset(sys_reset), .ce_cpu(ce_cpu), .ce_pix(ce_pix && !pause), .ce_snd(ce_snd),
         .cpu_stall(cpu_stall),
         .from_we(from_we), .from_addr(from_addr), .from_data(from_data),
         .cm_req(cm_req), .cm_we(cm_we), .cm_addr(cm_addr), .cm_wdata(cm_wdata), .cm_be(cm_be), .cm_ack(a_ack[1]),
         .dm_req(dm_req), .dm_we(dm_we), .dm_addr(dm_addr), .dm_wdata(dm_wdata), .dm_be(dm_be), .dm_ack(a_ack[2]),
         .sm_req(sm_req), .sm_addr(sm_addr), .sm_ack(a_ack[3]),
         .m_rdata(a_rdata),
-        .irq_event(vblank_start), .pal_snap(snap_ok), .render_go(render_go), .render_done(render_done),
+        .irq_event(vbl_ev), .pal_snap(snap_ok), .render_go(render_go), .render_done(render_done),
         .spr_raddr(spr_raddr), .spr_rdata(spr_rdata), .scroll_snap(scroll_snap),
         .tm_base_snap(tm_base_snap), .tm_prio_snap(tm_prio_snap), .tm_merge_snap(tm_merge_snap),
         .pal_snap_buf(!new_front), .disp_buf(front), .disp_pen(d_pen), .disp_rgb(d_rgb),
         .joy0(joy0), .joy1(joy1), .dsw1(dsw1), .dsw2(dsw2),
-        .snd_l(snd_l), .snd_r(snd_r),
+        .snd_l(snd_l_i), .snd_r(snd_r_i), .flip_screen(flip_screen),
         .dbg_pc(dbg_pc), .dbg_irqs(dbg_irqs), .dbg_nmis(dbg_nmis),
         .dbg_snap_drops(dbg_snap_drops), .dbg_dma_count()
     );
@@ -213,15 +222,21 @@ module nrc_core #(
         .render_t(dbg_render_ms100), .drops(dbg_snap_drops)
     );
 
+    // Flip Screen (DIP SW2:7): the game sets CRT register $74 and draws normally (MAME ignores the
+    // register and shows it upright), so the PCB flips in hardware; here the displayed framebuffer is
+    // read rotated 180 degrees. Latched at the frame start (in vertical blanking).
     logic [16:0] row_base;
+    logic        flip_q;
     always_ff @(posedge clk) begin
-        row_base <= 17'(vy) * 17'd320;          // two register stages: 14 clk per dot
-        d_addr   <= row_base + 17'(vx);
+        if (frame_start) flip_q <= flip_screen;
+        row_base <= 17'(flip_q ? 8'd239 - vy : vy) * 17'd320;   // two register stages: 14 clk per dot
+        d_addr   <= row_base + 17'(flip_q ? 9'd319 - vx : vx);
         if (ce_pix) begin
             hblank <= t_hb;
             vblank <= t_vb;
             hsync  <= t_hs;
             vsync  <= t_vs;
+            vb_next <= !((vcnt + 9'd1 >= 9'd16) && (vcnt + 9'd1 < 9'd256));
             rgb    <= (t_hb || t_vb) ? 24'h000000 : ov_rgb;
         end
     end

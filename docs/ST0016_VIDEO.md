@@ -113,7 +113,15 @@ The game writes a 28-byte table (ROM `$8020`) to ports `$60-$7B` once at boot [R
 With the 42.9545 MHz crystal / 6 = 7.159 MHz dot clock: 15.734 kHz, 60.05 Hz, i.e. NTSC. MAME
 instead runs a fictitious 384x384 @ 60 Hz screen and interrupts on its line numbers (see
 ARCHITECTURE.md "Interrupts"). Classification: totals and vertical window = [GAME-PROGRAMMED];
-dot clock = [INFERENCE from crystal]; horizontal sync placement = [MISTER-COMPATIBLE].
+dot clock = [INFERENCE from crystal]; horizontal sync placement = [MISTER-COMPATIBLE]: active dots
+0-319, front porch 49, HSync 34 dots (4.75 us), back porch 52; vblank/vsync change at the HSync edge.
+Measured output (sim/tb/m9_video_tb.sv): 15.734 kHz, 60.054 Hz, 262 lines, 320 x 240.
+
+### Flip Screen
+With DIP SW2:7 On the game writes `$74 = $59` (plus `$70/$71 = $0308`, `$75 = $31`) and draws
+exactly as unflipped (MAME, which ignores these registers, shows an upright picture), so the PCB
+flips in hardware. The core rotates the displayed framebuffer 180 degrees when `$74` bits 7-5 are
+non-zero (docs/KNOWN_ISSUES.md U-5).
 
 ### Ports 00/01 (raster/timer counter)
 The game reads `IN $00`, `IN $01` (low, high), inverts, subtracts `$03E7` and uses the result

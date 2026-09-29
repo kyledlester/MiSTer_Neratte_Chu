@@ -34,3 +34,15 @@ Behaviour relied upon: `ch1_ready` rises one cycle before the last burst word re
 
 Simulation: ModelSim 10.5b rejects three idioms Quartus accepts; `scripts/mk_sdram_sim.py` writes a
 mechanically edited copy to `build/sim/sdram_sim.sv` (same edits as the owner's NB-1 `test-m2.ps1`).
+
+## `crt_adjust.sv` - CRT Adjust (analog geometry)
+
+Upstream: MiSTer-CRT-Adjust by Umberto Parisi (rmonic79), GPL-3.0-or-later; byte-identical to the copy
+vendored in the owner's NA-1/NA-2 and NB-1 cores (SHA-1 `ddc1b6d311f26d50cc30ce1a83df9fc539830fbc`).
+Unmodified. All integration is in `rtl/nrc/nrc_crt_adjust.sv` (verified by `sim/tb/m17_crt_tb.sv`).
+
+## `pause.v` - generic MiSTer pause
+
+Upstream: JimmyStones/Pause_MiSTer (Jim Gregory), GPL-3.0-or-later; copied from
+MiSTer-devel/Arcade-Pacman_MiSTer `rtl/pause.v` @ `6b5ccb08145eadb31912b43d53a93ed522ab34b2`
+(SHA-1 `d5a5effd1bf91ae788436639bae3c63b8fe40347`). Unmodified; instantiated in `NRC.sv`.

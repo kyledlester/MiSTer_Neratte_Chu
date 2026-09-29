@@ -24,6 +24,7 @@ module nrc_clocks #(
     input  logic        rst_video,      // dot clock divider: PLL loss only, so sync never stops
     input  logic        cpu_stall,      // hold ce_cpu (SDRAM access pending)
     input  logic        turbo,          // simulation only: earn a CPU credit every clock (tie 0)
+    input  logic        pause,          // freeze: no credits earned or spent, no sound ticks
     output logic        ce_pix,
     output logic        tick8,
     output logic        ce_snd,
@@ -54,7 +55,9 @@ module nrc_clocks #(
             logic earn, spend;
 
             earn = 1'b0;
-            if (turbo) begin
+            if (pause) begin
+                // CPU time stands still: nothing earned, nothing spent (below), no sound tick
+            end else if (turbo) begin
                 earn = (credits < 8'd4);
             end else if (acc + NUM >= DEN) begin
                 acc  <= acc + NUM - DEN;
@@ -67,7 +70,7 @@ module nrc_clocks #(
             end
 
             if (gap != 0) gap <= gap - 2'd1;
-            spend = (credits != 0) && !cpu_stall && (gap == 0);
+            spend = (credits != 0) && !cpu_stall && (gap == 0) && !pause;
             if (spend) begin
                 ce_cpu <= 1'b1;
                 gap    <= 2'(MIN_GAP - 1);

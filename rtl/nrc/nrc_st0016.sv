@@ -52,6 +52,7 @@ module nrc_st0016 #(
     output logic [7:0]  tm_base_snap [8], // per tilemap slot at the snapshot: reg1 (0 = off)
     output logic [7:0]  tm_prio_snap,     //   reg3 == $FF (drawn over the sprites)
     output logic [7:0]  tm_merge_snap,    //   reg7 == $12 (merge mode)
+    output logic        flip_screen,      // CRT register $74 bits 7-5 != 0 (the game's hardware flip)
     input  logic        pal_snap_buf,
     input  logic        disp_buf,
     input  logic [10:0] disp_pen,
@@ -223,6 +224,7 @@ module nrc_st0016 #(
             for (int i = 0; i < 32; i++) scroll[i] <= 8'd0;
             for (int i = 0; i < 8; i++) tm_base[i] <= 8'd0;
             tm_prio <= 8'd0; tm_merge <= 8'd0;
+            flip_screen <= 1'b0;
             for (int i = 0; i < 9; i++) dmareg[i] <= 8'd0;
         end else begin
             case (bs)
@@ -247,6 +249,7 @@ module nrc_st0016 #(
                             if (a[7:0] < 8'hC0) begin
                                 vregs_we <= 1'b1;
                                 if (a[7:5] == 3'b010) scroll[a[4:0]] <= dout;
+                                if (a[7:0] == 8'h74) flip_screen <= (dout[7:5] != 3'b000);
                                 if (a[7:6] == 2'b00) begin
                                     if (a[2:0] == 3'd1) tm_base[a[5:3]] <= dout;
                                     if (a[2:0] == 3'd3) tm_prio[a[5:3]] <= (dout == 8'hFF);

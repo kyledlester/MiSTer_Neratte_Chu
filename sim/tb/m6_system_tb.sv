@@ -25,8 +25,8 @@ module m6_system_tb;
         .ioctl_wait(iowait),
         .sd_addr(sd_addr), .sd_din(sd_din), .sd_be(sd_be), .sd_req(sd_req), .sd_rnw(sd_rnw),
         .sd_dout(sd_dout), .sd_ready(sd_ready),
-        .joy0(32'd0), .joy1(32'd0), .dbg_overlay(1'b0),
-        .ce_pix(ce_pix), .rgb(rgb), .hblank(hb), .vblank(vb), .hsync(hs), .vsync(vs),
+        .joy0(32'd0), .joy1(32'd0), .dbg_overlay(1'b0), .pause(1'b0),
+        .ce_pix(ce_pix), .rgb(rgb), .hblank(hb), .vblank(vb), .hsync(hs), .vsync(vs), .vb_next(),
         .snd_l(), .snd_r(), .rom_ready(rom_ready),
         .dbg_pc(pc), .dbg_frames(frames), .dbg_render_ms100(rt), .dbg_snap_drops(drops),
         .dbg_irqs(irqs), .dbg_nmis(nmis));
